@@ -5,7 +5,7 @@
 
 Multi-strategy quantitative verification pipeline for Chinese A-share market.
 
-**10 open-source strategies tested on CSI 500 & CSI 800, with daily paper trading & QQ email notification.**
+**10 strategies tested on full CSI 500 (427 stocks) + CSI 800 (687 stocks), 2019-2026.**
 
 ---
 
@@ -16,55 +16,54 @@ git clone https://github.com/feng653/quant-strategy-verification.git
 cd quant-strategy-verification
 pip install -r requirements.txt
 
-# List strategies
+# List all strategies
 python main.py --list-strategies
 
-# Run full backtest
-python run_all.py
+# Full backtest (all strategies, both pools)
+python run_complete.py
 
 # Daily pipeline (data + signals + paper trade + email)
 python main.py --step daily
 ```
 
-## Strategy Results (100 stocks, 2024-2026)
+## Backtest Results (2024-01 ~ 2026-06, Complete Data)
 
-| Strategy | Pool | Return | Sharpe | MaxDD | Source |
-|----------|------|--------|--------|-------|--------|
-| MACD Signal | CSI 800 | **+275%** | **2.17** | -23% | ★10.4k |
-| MA Cross | CSI 500 | +202% | 1.52 | -30% | ★10.4k |
-| MACD Signal | CSI 500 | +163% | 1.58 | -23% | ★10.4k |
-| Bollinger | CSI 800 | +70% | 1.00 | -16% | ★10.4k |
-| Pairs Trading | CSI 500 | +22% | 0.38 | -16% | ★10.4k |
-| RSI Reversal | CSI 800 | -7% | -0.32 | -17% | ★10.4k |
+| Rank | Strategy | Pool | Annual% | Sharpe | MaxDD | Source |
+|:---:|----------|------|--------:|-------:|------|--------|
+| 1 | **MA Cross** | CSI 800 | **+33.4** | **0.97** | -24.7% | ★10.4k |
+| 2 | **MACD Sig.** | CSI 800 | +16.0 | 0.85 | -11.2% | ★10.4k |
+| 3 | **MACD Sig.** | CSI 500 | +20.8 | 0.81 | -23.6% | ★10.4k |
+| 4 | MA Cross | CSI 500 | +19.0 | 0.61 | -31.0% | ★10.4k |
+| 5 | Bollinger | CSI 500 | +8.3 | 0.49 | -18.6% | ★10.4k |
+| 6 | Bollinger | CSI 800 | +5.8 | 0.35 | -15.3% | ★10.4k |
+| 7 | Risk Parity | CSI 500 | +5.3 | 0.24 | -10.5% | ★4.8k |
 
-[Full analysis →](docs/PERFORMANCE_ANALYSIS.md)
+[Full Performance Analysis →](docs/PERFORMANCE_ANALYSIS.md)
 
-## Strategy Catalog (10 strategies, 4 categories)
+## Strategy Catalog
 
-| Strategy | Category | Source | Stars |
-|----------|----------|--------|:-----:|
-| MACD Signal | technical | je-suis-tm/quant-trading | 10.4k |
-| MA Cross | technical | je-suis-tm/quant-trading | 10.4k |
-| Bollinger Breakout | technical | je-suis-tm/quant-trading | 10.4k |
-| RSI Reversal | technical | je-suis-tm/quant-trading | 10.4k |
-| Alpha158 + LightGBM | factor | microsoft/qlib | 46.6k |
-| Alpha158 + XGBoost | factor | microsoft/qlib | 46.6k |
-| LSTM Rank | ml | microsoft/qlib | 46.6k |
-| Transformer Rank | ml | microsoft/qlib | 46.6k |
-| Pairs Trading | portfolio | je-suis-tm/quant-trading | 10.4k |
-| Risk Parity | portfolio | PyPortfolioOpt | 4.8k |
-
-Per-strategy docs: [docs/strategies/](docs/strategies/)
+| Strategy | Category | Source | Stars | Doc |
+|----------|----------|--------|:---:|------|
+| MACD Signal | technical | je-suis-tm/quant-trading | 10.4k | [→](docs/strategies/04-macd-signal.md) |
+| MA Cross | technical | je-suis-tm/quant-trading | 10.4k | [→](docs/strategies/01-ma-cross.md) |
+| Bollinger | technical | je-suis-tm/quant-trading | 10.4k | [→](docs/strategies/03-bollinger-breakout.md) |
+| RSI Reversal | technical | je-suis-tm/quant-trading | 10.4k | [→](docs/strategies/02-rsi-reversal.md) |
+| Alpha158+LGB | factor | microsoft/qlib | 46.6k | [→](docs/strategies/07-alpha158-lgb.md) |
+| Alpha158+XGB | factor | microsoft/qlib | 46.6k | [→](docs/strategies/08-alpha158-xgb.md) |
+| LSTM Rank | ml | microsoft/qlib | 46.6k | [→](docs/strategies/09-lstm-rank.md) |
+| Pairs Trading | portfolio | je-suis-tm/quant-trading | 10.4k | [→](docs/strategies/05-pairs-trading.md) |
+| Risk Parity | portfolio | PyPortfolioOpt | 4.8k | [→](docs/strategies/06-risk-parity.md) |
 
 ## Features
 
-- **2 stock pools**: CSI 500 (mid-cap) + CSI 800 (large+mid cap)
-- **Dual data sources**: AKShare (primary) + BaoStock (fallback)
+- **2 stock pools**: CSI 500 (427 stocks) + CSI 800 (687 stocks)
+- **Full 5-year data**: 2019-2026, 1.8M+ rows
+- **Dual data sources**: AKShare primary + BaoStock fallback
 - **A-share rules**: T+1, price limits, stamp duty
 - **Look-ahead free**: signal T → execution T+1 open
 - **Star-tagged**: every strategy tracks open-source provenance
 - **Daily pipeline**: auto data refresh + paper trade + QQ email
-- **GPU-ready**: LSTM/Transformer via PyTorch CUDA (optional)
+- **GPU-ready**: PyTorch CUDA for deep models (CPU also supported)
 
 ## Docs
 
@@ -72,7 +71,7 @@ Per-strategy docs: [docs/strategies/](docs/strategies/)
 |----------|---------|
 | [QUICKSTART.md](QUICKSTART.md) | Setup & usage guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture & data flow |
-| [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md) | Full backtest analysis |
+| [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md) | Complete performance analysis |
 | [docs/strategies/](docs/strategies/) | 10 per-strategy documents |
 
 ## License
