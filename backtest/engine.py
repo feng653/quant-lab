@@ -35,21 +35,6 @@ class AShareCommission(bt.CommInfoBase):
         return comm
 
 
-class SlippageModel(bt.SlippageBase):
-    """Fixed-percentage slippage model."""
-
-    params = (("slippage_pct", cfg.cost.slippage),)
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def stop(self, data, is_long: bool, dt, order) -> tuple[float, float] | None:
-        price = data.close[0]
-        direction = 1 if is_long else -1
-        slip = price * self.p.slippage_pct
-        return (price + direction * slip, price)
-
-
 class GenericStrategy(bt.Strategy):
     """Generic backtrader strategy that replays pre-generated signals."""
 
@@ -144,11 +129,26 @@ def run_single_strategy(
     strat = results[0]
     sharpe = strat.analyzers.sharpe.get_analysis()
     dd = strat.analyzers.drawdown.get_analysis()
-    ret = strat.analyzers.returns.get_analysis()
     trades = strat.analyzers.trades.get_analysis()
 
     final_value = cerebro.broker.getvalue()
     total_return = (final_value / cfg.backtest.initial_cash) - 1
+
+    total_trades = 0
+    won_trades = 0
+    if trades:
+        t = trades.get("total", {})
+        if hasattr(t, "total"):
+            total_trades = int(t.total) if t.total else 0
+        else:
+            total_trades = int(t.get("total", 0)) if isinstance(t, dict) else 0
+        w = trades.get("won", {})
+        if hasattr(w, "total"):
+            won_trades = int(w.total) if w.total else 0
+        elif isinstance(w, dict):
+            won_trades = int(w.get("total", 0))
+
+    win_rate = round(won_trades / total_trades * 100, 1) if total_trades > 0 else 0
 
     return {
         "strategy": strategy_name,
@@ -157,6 +157,6 @@ def run_single_strategy(
         "total_return_pct": round(total_return * 100, 2),
         "sharpe_ratio": round(sharpe.get("sharperatio", 0) or 0, 3),
         "max_drawdown_pct": round(dd.get("max", {}).get("drawdown", 0) or 0, 2),
-        "total_trades": trades.get("total", {}).get("total", 0) if trades else 0,
-        "win_rate_pct": round(trades.get("won", {}).get("pnl", 0) * 100, 1) if trades and "won" in trades else 0,
+        "total_trades": total_trades,
+        "win_rate_pct": win_rate,
     }

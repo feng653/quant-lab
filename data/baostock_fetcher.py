@@ -4,6 +4,7 @@ BaoStock data fetcher — fallback data source for core OHLCV and financials.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 def _cache_path(name: str) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return DATA_DIR / f"bs_{name}.parquet"
+    h = hashlib.md5(name.encode()).hexdigest()[:12]
+    return DATA_DIR / f"bs_{h}.parquet"
 
 
 def _load_cache(name: str) -> pd.DataFrame | None:

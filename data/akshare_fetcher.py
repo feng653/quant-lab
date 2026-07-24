@@ -4,6 +4,7 @@ AKShare data fetcher — primary data source for Chinese A-share markets.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 def _cache_path(name: str) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return DATA_DIR / f"{name}.parquet"
+    h = hashlib.md5(name.encode()).hexdigest()[:12]
+    return DATA_DIR / f"{h}.parquet"
 
 
 def _load_cache(name: str) -> pd.DataFrame | None:
@@ -72,9 +74,10 @@ def fetch_daily_kline(
     frames: list[pd.DataFrame] = []
     for sym in symbols:
         try:
-            df = ak.stock_zh_a_hist(
-                symbol=sym,
-                period="daily",
+            prefix = "sh" if sym.startswith("6") else "sz"
+            ak_sym = f"{prefix}{sym}"
+            df = ak.stock_zh_a_daily(
+                symbol=ak_sym,
                 start_date=start.replace("-", ""),
                 end_date=end.replace("-", ""),
                 adjust=adjust,
@@ -88,18 +91,6 @@ def fetch_daily_kline(
         return pd.DataFrame()
 
     result = pd.concat(frames, ignore_index=True)
-    result = result.rename(
-        columns={
-            "日期": "date",
-            "开盘": "open",
-            "收盘": "close",
-            "最高": "high",
-            "最低": "low",
-            "成交量": "volume",
-            "成交额": "amount",
-            "换手率": "turnover",
-        }
-    )
     result["date"] = pd.to_datetime(result["date"])
     _save_cache(cache_key, result)
     logger.info("AKShare: fetched daily data for %d symbols, %d rows", len(symbols), len(result))

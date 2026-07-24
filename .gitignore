@@ -25,9 +25,6 @@ data/qlib_data/
 *.db
 *.sqlite
 
-# Reports
-reports/
-
 # OS
 .DS_Store
 Thumbs.db
