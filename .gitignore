@@ -25,6 +25,12 @@ data/qlib_data/
 *.db
 *.sqlite
 
+# Reports
+reports/
+
+# Local config (DO NOT COMMIT)
+.env
+
 # OS
 .DS_Store
 Thumbs.db

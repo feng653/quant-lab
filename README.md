@@ -3,94 +3,77 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
-Multi-strategy quantitative verification pipeline for the Chinese A-share market.
+Multi-strategy quantitative verification pipeline for Chinese A-share market.
 
-**Tests open-source strategies from top GitHub repos on CSI 800 and CSI 500 stock pools, with historical data from 2019-2023 (train) and 2024-2026 (out-of-sample backtest).**
+**10 open-source strategies tested on CSI 500 & CSI 800, with daily paper trading & QQ email notification.**
 
 ---
-
-## Features
-
-- **10 strategies** across 4 categories (technical, factor, ML, portfolio)
-- **2 stock pools**: CSI 800 (large+mid cap) and CSI 500 (mid cap)
-- **Dual data sources**: AKShare primary + BaoStock fallback
-- **A-share rules**: T+1 settlement, price limits, stamp duty simulation
-- **Star-tagged provenance**: every strategy tracks its open-source origin
-- **ML GPU support**: LSTM/Transformer via Qlib + PyTorch CUDA
-- **Paper trading ready**: vnpy integration with MiniQMT reserved
 
 ## Quick Start
 
 ```bash
-# Install
+git clone https://github.com/feng653/quant-strategy-verification.git
+cd quant-strategy-verification
 pip install -r requirements.txt
 
-# List all strategies
+# List strategies
 python main.py --list-strategies
 
-# Download data
-python main.py --step data --pool csi800,csi500
+# Run full backtest
+python run_all.py
 
-# Run technical strategies
-python main.py --step backtest --strategies ma_cross,rsi_reversal,bollinger_breakout,macd_signal
-
-# Run ML strategies (CPU)
-python main.py --step ml --strategies alpha158_lgb,alpha158_xgb
-
-# Run ML strategies (GPU)
-python main.py --step ml --strategies lstm_rank --device cuda
-
-# Full pipeline
-python main.py --step all --pool csi800,csi500 --device cuda
+# Daily pipeline (data + signals + paper trade + email)
+python main.py --step daily
 ```
 
-## Strategy Catalog
+## Strategy Results (100 stocks, 2024-2026)
 
-| Strategy | Source | Stars | Category |
-|----------|--------|:-----:|----------|
-| ma_cross | je-suis-tm/quant-trading | 10.4k | technical |
-| rsi_reversal | je-suis-tm/quant-trading | 10.4k | technical |
-| bollinger_breakout | je-suis-tm/quant-trading | 10.4k | technical |
-| macd_signal | je-suis-tm/quant-trading | 10.4k | technical |
-| alpha158_lgb | microsoft/qlib | 46.6k | factor |
-| alpha158_xgb | microsoft/qlib | 46.6k | factor |
-| lstm_rank | microsoft/qlib | 46.6k | ml |
-| transformer_rank | microsoft/qlib | 46.6k | ml |
-| pairs_trading | je-suis-tm/quant-trading | 10.4k | portfolio |
-| risk_parity | robertmartin8/PyPortfolioOpt | 4.8k | portfolio |
+| Strategy | Pool | Return | Sharpe | MaxDD | Source |
+|----------|------|--------|--------|-------|--------|
+| MACD Signal | CSI 800 | **+275%** | **2.17** | -23% | ★10.4k |
+| MA Cross | CSI 500 | +202% | 1.52 | -30% | ★10.4k |
+| MACD Signal | CSI 500 | +163% | 1.58 | -23% | ★10.4k |
+| Bollinger | CSI 800 | +70% | 1.00 | -16% | ★10.4k |
+| Pairs Trading | CSI 500 | +22% | 0.38 | -16% | ★10.4k |
+| RSI Reversal | CSI 800 | -7% | -0.32 | -17% | ★10.4k |
 
-## Project Structure
+[Full analysis →](docs/PERFORMANCE_ANALYSIS.md)
 
-```
-quant-strategy-verification/
-├── config/          # Parameters, dates, costs
-├── data/            # AKShare + BaoStock fetchers, processor, universe
-├── strategies/      # 4 categories: technical/factor/ml/portfolio
-├── backtest/        # backtrader engine, broker, batch runner
-├── execution/       # vnpy paper trading, MiniQMT stub
-├── evaluation/      # metrics, reports, comparison
-├── main.py          # CLI entry point
-└── docs/            # Architecture documentation
-```
+## Strategy Catalog (10 strategies, 4 categories)
 
-## Data Sources
+| Strategy | Category | Source | Stars |
+|----------|----------|--------|:-----:|
+| MACD Signal | technical | je-suis-tm/quant-trading | 10.4k |
+| MA Cross | technical | je-suis-tm/quant-trading | 10.4k |
+| Bollinger Breakout | technical | je-suis-tm/quant-trading | 10.4k |
+| RSI Reversal | technical | je-suis-tm/quant-trading | 10.4k |
+| Alpha158 + LightGBM | factor | microsoft/qlib | 46.6k |
+| Alpha158 + XGBoost | factor | microsoft/qlib | 46.6k |
+| LSTM Rank | ml | microsoft/qlib | 46.6k |
+| Transformer Rank | ml | microsoft/qlib | 46.6k |
+| Pairs Trading | portfolio | je-suis-tm/quant-trading | 10.4k |
+| Risk Parity | portfolio | PyPortfolioOpt | 4.8k |
 
-| Source | Coverage | Free |
-|--------|----------|:----:|
-| [AKShare](https://github.com/akfamily/akshare) (★21.5k) | 500+ endpoints: OHLCV, financials, constituents | Yes |
-| [BaoStock](http://baostock.com) | Core OHLCV + financials via dedicated server | Yes |
+Per-strategy docs: [docs/strategies/](docs/strategies/)
 
-## Backtest Configuration
+## Features
 
-| Parameter | Value |
-|-----------|-------|
-| Train period | 2019-01 ~ 2023-12 |
-| Backtest period | 2024-01 ~ 2026-06 |
-| Initial capital | 1,000,000 CNY |
-| Commission | 0.1% per side |
-| Stamp duty | 0.1% on sell |
-| Slippage | 0.1% |
-| Frequency | Daily |
+- **2 stock pools**: CSI 500 (mid-cap) + CSI 800 (large+mid cap)
+- **Dual data sources**: AKShare (primary) + BaoStock (fallback)
+- **A-share rules**: T+1, price limits, stamp duty
+- **Look-ahead free**: signal T → execution T+1 open
+- **Star-tagged**: every strategy tracks open-source provenance
+- **Daily pipeline**: auto data refresh + paper trade + QQ email
+- **GPU-ready**: LSTM/Transformer via PyTorch CUDA (optional)
+
+## Docs
+
+| Document | Content |
+|----------|---------|
+| [QUICKSTART.md](QUICKSTART.md) | Setup & usage guide |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture & data flow |
+| [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md) | Full backtest analysis |
+| [docs/strategies/](docs/strategies/) | 10 per-strategy documents |
 
 ## License
 

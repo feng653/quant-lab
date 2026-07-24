@@ -2,6 +2,9 @@
 Entry point — Multi-strategy quantitative verification pipeline for Chinese A-shares.
 
 Usage:
+    # Run daily pipeline (update data + generate signals + paper trade + email)
+    python main.py --step daily
+
     # Download data and prepare universe
     python main.py --step data --pool csi800
 
@@ -120,7 +123,7 @@ def step_report(results: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-strategy quantitative verification pipeline")
-    parser.add_argument("--step", default="all", choices=["data", "backtest", "ml", "report", "all"])
+    parser.add_argument("--step", default="all", choices=["data", "backtest", "ml", "report", "all", "daily", "daily-update", "daily-trade"])
     parser.add_argument("--pool", default="csi800,csi500", help="Comma-separated: csi800,csi500")
     parser.add_argument("--strategies", default="ma_cross,rsi_reversal,bollinger_breakout,macd_signal", help="Comma-separated strategy names")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
@@ -152,9 +155,62 @@ def main() -> None:
     if args.step in ("report", "all"):
         step_report(results)
 
+    if args.step in ("daily", "daily-update"):
+        logger.info("=== Daily Update: fetching latest data ===")
+        from data.daily_update import update_daily_data
+        result = update_daily_data()
+        if not result.empty:
+            latest = pd.to_datetime(result["date"]).max().strftime("%Y-%m-%d")
+            logger.info("Data updated through %s, %d total rows", latest, len(result))
+
+    if args.step in ("daily", "daily-trade"):
+        logger.info("=== Daily Trade: running paper trading ===")
+        from execution.paper_local import PaperAccount
+        from execution.notify import send_daily_report, build_daily_email_body
+        from config.settings import config as cfg
+
+        account = PaperAccount(initial_cash=cfg.backtest.initial_cash)
+        latest_data = pd.read_parquet(DATA_DIR / "daily_ohlcv.parquet")
+        latest_date = latest_data["date"].max()
+
+        # Generate signals for today
+        pivot = latest_data.pivot(index="date", columns="code", values="close")
+        today_prices = latest_data[latest_data["date"] == latest_date].set_index("code")["close"].to_dict()
+
+        all_signals: dict[str, list[dict]] = {}
+        signal_summary: dict[str, int] = {}
+
+        from run_all import SIGNAL_FUNCS, STAR_MAP
+        for sname, sfunc in SIGNAL_FUNCS.items():
+            sigs = sfunc(pivot)
+            sc = sum(len(v) for v in sigs.values())
+            today_sigs = sigs.get(latest_date.strftime("%Y-%m-%d"), [])
+            all_signals[sname] = today_sigs
+            signal_summary[sname] = len(today_sigs)
+
+        # Execute trades
+        trades = []
+        for sname, sig_list in all_signals.items():
+            day_trades = account.execute_signals(sig_list, today_prices)
+            trades.extend(day_trades)
+
+        summary = account.summary()
+        logger.info("Account: total=%.2f, cash=%.2f, positions=%d", summary["total_value"], summary["cash"], summary["position_count"])
+
+        # Send email
+        if trades or any(v > 0 for v in signal_summary.values()):
+            body = build_daily_email_body(latest_date.strftime("%Y-%m-%d"), trades, summary, signal_summary)
+            success = send_daily_report(f"[量化策略] 日报 {latest_date.strftime('%Y-%m-%d')}", body)
+            if success:
+                logger.info("Daily report emailed successfully")
+            else:
+                logger.warning("Email send failed — check .env configuration")
+        else:
+            logger.info("No signals today, skipping email")
+
     if results:
         logger.info("Done. %d strategy-pool combinations evaluated.", len(results))
-        if args.step != "report":
+        if args.step not in ("report", "daily", "daily-update", "daily-trade"):
             step_report(results)
 
 
