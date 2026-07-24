@@ -26,75 +26,137 @@ TO_EMAIL=接收报告的邮箱
 ### 查看所有策略
 
 ```bash
-python main.py --list-strategies
+python research/run_backtest.py --list-strategies
 ```
 
-### 完整回测 (6个策略 × 2个池子)
+### 完整回测 (10个策略 × CSI 500 / CSI 800)
 
 ```bash
-python run_all.py
+python research/run_backtest.py
 ```
 
-约5-10分钟，输出：
-- `reports/complete_report.md` — 完整对比报告
-- `reports/report_csi500.md` — CSI 500 单独报告
-- `reports/report_csi800.md` — CSI 800 单独报告
-- `results/all_results.json` — 详细回测数据
+约10-15分钟（首次需下载完整数据，之后缓存加速），输出：
+- `research/reports/complete_report.md` — 完整对比报告
+- `research/reports/report_csi500.md` — CSI 500 单独报告
+- `research/reports/report_csi800.md` — CSI 800 单独报告
+- `research/results/all_results.json` — 详细回测数据
 
-### 快速集成测试 (10只股票, 1分钟)
+### ML Walk-Forward 回测
 
 ```bash
-python test_integration.py
+python research/run_ml_walkforward.py
 ```
 
-### 每日数据更新
+### 快速集成测试
 
 ```bash
-python main.py --step daily-update
+python tests/test_integration.py
 ```
 
-### 每日模拟交易 + 邮件通知
+### 每日推荐邮件 (手动触发)
 
 ```bash
-python main.py --step daily
+python dispatch/daily_recommend.py
 ```
 
-一次性完成：拉数据 → 生成信号 → 模拟成交 → QQ邮箱推送
+### 每日表现邮件 (手动触发)
 
-### Windows 定时任务 (每日18:00自动执行)
+```bash
+python dispatch/daily_performance.py
+```
+
+### 一键双邮件 (手动触发)
+
+```bash
+python dispatch/run_now.py
+```
+
+一次性完成：推荐邮件 + 表现邮件（含图表），保存到 `dispatch/mail/YYYYMM/`
+
+## 4. Windows 定时任务
 
 ```powershell
 # PowerShell 管理员运行
-$action = New-ScheduledTaskAction -Execute "D:\doc\量化\project2\.venv\Scripts\python.exe" -Argument "main.py --step daily" -WorkingDirectory "D:\doc\量化\project2"
-$trigger = New-ScheduledTaskTrigger -Daily -At 18:00
-Register-ScheduledTask -TaskName "QuantDaily" -Action $action -Trigger $trigger
+$python = "D:\doc\量化\project2\.venv\Scripts\python.exe"
+$workdir = "D:\doc\量化\project2"
+
+# 每日推荐邮件 15:30
+$action1 = New-ScheduledTaskAction -Execute $python -Argument "dispatch\daily_recommend.py" -WorkingDirectory $workdir
+$trigger1 = New-ScheduledTaskTrigger -Daily -At 15:30
+Register-ScheduledTask -TaskName "QuantRecommend" -Action $action1 -Trigger $trigger1 -Force
+
+# 每日表现邮件 16:00
+$action2 = New-ScheduledTaskAction -Execute $python -Argument "dispatch\daily_performance.py" -WorkingDirectory $workdir
+$trigger2 = New-ScheduledTaskTrigger -Daily -At 16:00
+Register-ScheduledTask -TaskName "QuantPerformance" -Action $action2 -Trigger $trigger2 -Force
 ```
 
-## 4. 项目结构
+## 5. 项目结构
 
 ```
-quant-strategy-verification/
-├── main.py                    # CLI入口
-├── run_all.py                 # 完整回测
-├── test_final.py              # 最终测试
-├── test_integration.py        # 快速验证
-├── config/                    # 参数配置
-├── data/                      # 数据管道 + 每日更新
-├── strategies/                # 10个策略
-├── backtest/                  # 回测引擎
-├── execution/                 # 模拟盘 + 邮件通知
-├── evaluation/                # 指标 + 报告
-├── docs/                      # 策略文档 + 架构说明
-├── reports/                   # 回测报告
-├── results/                   # 详细数据
-└── state/                     # 模拟账户状态
+quant-lab/
+├── .env / .env.example / .gitignore
+├── README.md / QUICKSTART.md / requirements.txt
+│
+├── core/                       # 共享核心
+│   ├── config/settings.py      # 参数配置
+│   ├── data/                   # 数据管道 (AKShare + BaoStock)
+│   │   └── cache/              # 行情数据缓存 (parquet)
+│   ├── strategies/             # 10个策略
+│   │   ├── technical/          # MA Cross, RSI, Bollinger, MACD
+│   │   ├── factor/             # Alpha158+LGB, Alpha158+XGB
+│   │   ├── ml/                 # LSTM, Transformer
+│   │   └── portfolio/          # Pairs Trading, Risk Parity
+│   └── backtest/               # 回测引擎 (backtrader)
+│
+├── research/                   # 研究系统 (回测 + 训练 + 分析)
+│   ├── run_backtest.py         # 完整回测入口
+│   ├── run_ml_walkforward.py   # ML Walk-Forward 训练
+│   ├── run_all.py              # 6策略快速回测
+│   ├── evaluation/             # 指标计算 + 报告生成
+│   ├── results/                # 回测数据 (JSON)
+│   ├── reports/                # 回测报告 (Markdown / HTML)
+│   └── docs/                   # 文档
+│       ├── ARCHITECTURE.md
+│       ├── PERFORMANCE_ANALYSIS.md
+│       ├── COMPLETION_REPORT.md
+│       ├── strategies/         # 10个策略分文档
+│       └── resources/          # 量化资源调研
+│
+├── dispatch/                   # 信息分发系统 (邮件 + 微信 + 仪表盘)
+│   ├── daily_recommend.py      # 每日推荐邮件
+│   ├── daily_performance.py    # 每日表现邮件 (含图表)
+│   ├── run_now.py              # 手动触发双邮件
+│   ├── charts/generator.py     # matplotlib 图表
+│   ├── notify/                 # 通知渠道
+│   │   ├── base.py             # 通知抽象
+│   │   └── email_qq.py         # QQ邮箱 SMTP
+│   ├── state/                  # 模拟账户状态
+│   │   ├── account.py
+│   │   └── strategy_state.json
+│   ├── mail/YYYYMM/            # 邮件归档 (按月分文件夹)
+│   └── web/                    # Flask 仪表盘 (预留)
+│
+├── execution/                  # 实盘接入层 (预留)
+│   ├── paper_vnpy.py
+│   └── paper_xtquant.py
+│
+├── tests/                      # 测试
+│   ├── test_integration.py
+│   └── test_backtest.py
+│
+└── scripts/                    # 运维脚本
 ```
 
-## 5. 文档索引
+## 6. 文档索引
 
 | 文档 | 内容 |
 |------|------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构设计 + 数据流图 |
-| [docs/PERFORMANCE_ANALYSIS.md](docs/PERFORMANCE_ANALYSIS.md) | 回测绩效全面分析 |
-| [docs/strategies/](docs/strategies/) | 10个策略分文档 |
-| [docs/web_resources/](../docs/web_resources/) | 量化资源调研 |
+| [research/docs/ARCHITECTURE.md](research/docs/ARCHITECTURE.md) | 架构设计 + 数据流图 |
+| [research/docs/PERFORMANCE_ANALYSIS.md](research/docs/PERFORMANCE_ANALYSIS.md) | 回测绩效全面分析 |
+| [research/docs/strategies/](research/docs/strategies/) | 10个策略分文档 |
+| [research/docs/COMPLETION_REPORT.md](research/docs/COMPLETION_REPORT.md) | 项目完整工作记录 |
+
+## 7. GitHub
+
+仓库地址: https://github.com/feng653/quant-lab
