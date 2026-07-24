@@ -372,6 +372,11 @@ def main():
         logger.error("Failed to send.")
 
     (ROOT / "reports" / "daily_performance.html").write_text(html_body, encoding="utf-8")
+    mail_dir = ROOT / "mail"
+    mail_dir.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    (mail_dir / f"performance_{ts}.html").write_text(html_body, encoding="utf-8")
+    logger.info("Saved to mail/performance_%s.html", ts)
     logger.info("Report saved.")
 
 

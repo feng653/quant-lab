@@ -1,0 +1,71 @@
+{
+  "generated": "2026-07-25T02:01:47.008894",
+  "strategies": {
+    "MA Cross": {
+      "name": "MA Cross",
+      "stars": "★10.4k",
+      "annual_return": 37.53,
+      "total_return": 113.84,
+      "sharpe": 1.38,
+      "max_dd": -19.6,
+      "equity_latest": 2138425.61,
+      "positions_count": 0,
+      "trading_days": 601
+    },
+    "RSI Rev.": {
+      "name": "RSI Rev.",
+      "stars": "★10.4k",
+      "annual_return": 0.91,
+      "total_return": 2.19,
+      "sharpe": -0.066,
+      "max_dd": -26.05,
+      "equity_latest": 1021916.12,
+      "positions_count": 5,
+      "trading_days": 601
+    },
+    "Bollinger": {
+      "name": "Bollinger",
+      "stars": "★10.4k",
+      "annual_return": 5.5,
+      "total_return": 13.63,
+      "sharpe": 0.198,
+      "max_dd": -19.0,
+      "equity_latest": 1136258.43,
+      "positions_count": 0,
+      "trading_days": 601
+    },
+    "MACD": {
+      "name": "MACD",
+      "stars": "★10.4k",
+      "annual_return": 23.46,
+      "total_return": 65.3,
+      "sharpe": 0.983,
+      "max_dd": -17.93,
+      "equity_latest": 1653048.19,
+      "positions_count": 4,
+      "trading_days": 601
+    },
+    "Pairs Tr.": {
+      "name": "Pairs Tr.",
+      "stars": "★10.4k",
+      "annual_return": -46.46,
+      "total_return": -77.46,
+      "sharpe": -1.128,
+      "max_dd": -78.05,
+      "equity_latest": 225425.55,
+      "positions_count": 1,
+      "trading_days": 601
+    },
+    "Risk Par.": {
+      "name": "Risk Par.",
+      "stars": "★4.8k",
+      "annual_return": 0.87,
+      "total_return": 2.1,
+      "sharpe": -0.096,
+      "max_dd": -15.44,
+      "equity_latest": 1020970.1,
+      "positions_count": 6,
+      "trading_days": 601
+    }
+  }
+}

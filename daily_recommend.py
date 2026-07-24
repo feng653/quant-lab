@@ -269,8 +269,13 @@ def main():
     else:
         logger.error("Failed to send recommendation email.")
 
-    # Save local copy
+    # Save local copy with timestamp
     (ROOT / "reports" / "daily_recommend.html").write_text(html_body, encoding="utf-8")
+    mail_dir = ROOT / "mail"
+    mail_dir.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    (mail_dir / f"recommend_{ts}.html").write_text(html_body, encoding="utf-8")
+    logger.info("Saved to mail/recommend_%s.html", ts)
 
 
 if __name__ == "__main__":
