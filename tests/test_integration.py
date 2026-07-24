@@ -1,11 +1,11 @@
-"""Quick integration test — validates the pipeline end-to-end."""
+﻿"""Quick integration test — validates the pipeline end-to-end."""
 
 import sys
 
 sys.path.insert(0, ".")
 
 from config.settings import config as cfg
-from data.akshare_fetcher import fetch_index_members, fetch_daily_kline
+from data.fetcher_akshare import fetch_index_members, fetch_daily_kline
 from data.processor import clean_ohlcv, compute_returns, price_limit_filter
 from strategies.technical.ma_cross import MACrossStrategy
 from strategies.technical.rsi import RSIStrategy

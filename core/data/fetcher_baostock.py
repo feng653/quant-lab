@@ -1,4 +1,4 @@
-"""
+﻿"""
 BaoStock data fetcher — fallback data source for core OHLCV and financials.
 """
 

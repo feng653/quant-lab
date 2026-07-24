@@ -1,4 +1,4 @@
-"""
+﻿"""
 Data processor — cleaning, alignment, and preparation for backtesting.
 """
 

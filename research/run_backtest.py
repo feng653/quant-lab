@@ -1,4 +1,4 @@
-"""
+﻿"""
 Complete pipeline — full data (2019-2026), 10 strategies, 2 pools, ML training.
 
 Run: python run_complete.py
@@ -12,7 +12,8 @@ Produces:
 
 import sys
 
-sys.path.insert(0, ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "core"))
 
 import hashlib
 import json
@@ -29,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import config as cfg
-from data.akshare_fetcher import fetch_index_members
+from data.fetcher_akshare import fetch_index_members
 from data.processor import clean_ohlcv, compute_returns
 
 ROOT = Path(__file__).resolve().parent

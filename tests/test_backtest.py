@@ -1,4 +1,4 @@
-"""Final test — fixes look-ahead bias with next-day execution."""
+﻿"""Final test — fixes look-ahead bias with next-day execution."""
 
 import sys
 
@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import config as cfg
-from data.akshare_fetcher import fetch_index_members
+from data.fetcher_akshare import fetch_index_members
 from data.processor import clean_ohlcv, compute_returns, price_limit_filter
 from evaluation.report import generate_markdown_report, generate_html_report
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Universe manager — handles index composition history (survivorship-bias-free).
 """
 
@@ -30,7 +30,7 @@ def load_index_members_history(index_code: str) -> dict[pd.Timestamp, list[str]]
         grouped = df.groupby("date")["code"].apply(list)
         return grouped.to_dict()
 
-    from data.akshare_fetcher import fetch_index_members
+    from data.fetcher_akshare import fetch_index_members
 
     codes = fetch_index_members(index_code)
     if not codes:

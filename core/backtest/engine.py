@@ -1,4 +1,4 @@
-"""
+﻿"""
 Backtest engine — wraps backtrader for A-share market simulation.
 
 Features:

@@ -1,4 +1,4 @@
-"""
+﻿"""
 AKShare data fetcher — primary data source for Chinese A-share markets.
 """
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Daily data update — incrementally downloads latest trading day's data.
 
 Usage: python data/daily_update.py [--date YYYY-MM-DD]
@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from config.settings import config as cfg
-from data.akshare_fetcher import fetch_index_members
+from data.fetcher_akshare import fetch_index_members
 
 logger = logging.getLogger(__name__)
 CACHE = Path(__file__).resolve().parent / "cache"

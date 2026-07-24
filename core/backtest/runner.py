@@ -1,4 +1,4 @@
-"""
+﻿"""
 Batch runner — orchestrates multiple strategies across multiple stock pools.
 """
 

@@ -105,7 +105,50 @@ def monthly_return_heatmap(equity_data: dict[str, pd.Series]) -> str:
     return fig_to_base64(fig)
 
 
-def strategy_bar_chart(results: list[dict[str, Any]], metric: str = "annual_return_pct", title: str = "") -> str:
+def strategy_single_chart(name: str, series: pd.Series, title: str = "") -> str:
+    """Generate a single strategy's equity curve + drawdown chart."""
+    if series.empty or len(series) < 2:
+        return ""
+    normalized = series / series.iloc[0]
+    peak = normalized.cummax()
+    dd = (normalized - peak) / peak * 100
+    ret = (normalized.iloc[-1] - 1) * 100
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 4), gridspec_kw={"height_ratios": [3, 1]})
+    color = COLORS[hash(name) % len(COLORS)]
+
+    ax1.plot(normalized.index, normalized.values, color=color, linewidth=1.8, label=f"{name} 净值")
+    ax1.axhline(y=1.0, color="gray", linestyle="--", alpha=0.4)
+    ax1.fill_between(normalized.index, 1.0, normalized.values, where=normalized.values > 1.0, color=color, alpha=0.15)
+    ax1.fill_between(normalized.index, normalized.values, 1.0, where=normalized.values < 1.0, color="#d62728", alpha=0.1)
+    ax1.set_title(title or f"{name} — 净值走势 (收益 {ret:+.1f}%)", fontsize=12, fontweight="bold")
+    ax1.legend(fontsize=9, loc="upper left")
+    ax1.set_ylabel("净值", fontsize=9)
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    ax1.grid(True, alpha=0.3)
+
+    ax2.fill_between(dd.index, dd.values, 0, color="#d62728", alpha=0.4)
+    ax2.plot(dd.index, dd.values, color="#d62728", linewidth=1)
+    ax2.set_ylabel("回撤%", fontsize=9)
+    ax2.set_ylim(bottom=min(dd.min() * 1.2, -40), top=5)
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+    ax2.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    return fig_to_base64(fig)
+
+
+def strategy_grid_charts(equity_data: dict[str, pd.Series], title: str = "") -> str:
+    """Generate a grid of individual strategy charts."""
+    if not equity_data:
+        return ""
+    html_parts = ['<div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">']
+    for name, series in equity_data.items():
+        chart = strategy_single_chart(name, series)
+        if chart:
+            html_parts.append(f'<div style="flex:1;min-width:480px;max-width:600px">{chart}</div>')
+    html_parts.append("</div>")
+    return "\n".join(html_parts)
     """Generate horizontal bar chart comparing strategy metrics."""
     fig, ax = plt.subplots(figsize=(8, 5))
     sorted_results = sorted([r for r in results if r.get(metric, 0) != 0], key=lambda x: x.get(metric, 0))
