@@ -27,6 +27,7 @@ data/qlib_data/
 # Runtime state & records
 dispatch/state/strategy_state.json
 dispatch/state/trades.db
+dispatch/state/trades.db-*
 dispatch/state/signals_cache/
 dispatch/state/models/
 dispatch/mail/
