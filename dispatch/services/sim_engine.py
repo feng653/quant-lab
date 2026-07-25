@@ -48,8 +48,12 @@ def _market_vol_series(pivot: pd.DataFrame) -> pd.Series:
 
 def simulate_strategy(pivot: pd.DataFrame, signals: dict, strategy: str,
                       sim_dates: list[pd.Timestamp], bench_start: float | None = None,
-                      benchmark: pd.Series | None = None) -> dict:
+                      benchmark: pd.Series | None = None,
+                      rebalance_days: int = RB, max_positions: int = MAX_POS) -> dict:
     """Run both modes for one strategy over sim_dates.
+
+    rebalance_days / max_positions come from the strategy's registry spec,
+    so daily-rebalancing strategies (e.g. AM GBR) coexist with monthly ones.
 
     Returns {mode: {"snapshots": [...], "trades": [...], "costs": {...},
                     "final": {...}, "positions": {...}}}
@@ -72,7 +76,7 @@ def simulate_strategy(pivot: pd.DataFrame, signals: dict, strategy: str,
             for c, p in prices.items():
                 last_px[c] = float(p)
             di = date_pos[dt]
-            is_rb = di % RB == 0
+            is_rb = di % rebalance_days == 0
             prev_dt = all_dates[di - 1] if di > 0 else dt
             day_sigs = signals.get(str(prev_dt.date()), [])
             buys = [s for s in day_sigs if s["action"] == "buy"]
@@ -124,7 +128,7 @@ def simulate_strategy(pivot: pd.DataFrame, signals: dict, strategy: str,
                         exposure = float(np.clip(TARGET_VOL / v, MIN_EXPOSURE, MAX_EXPOSURE)) if pd.notna(v) and v > 0 else 1.0
                     else:
                         exposure = 1.0
-                    valid = valid[:MAX_POS]
+                    valid = valid[:max_positions]
                     w = exposure / len(valid)
                     for s in valid:
                         c = s["code"]

@@ -52,21 +52,9 @@ def main(force: bool = False) -> None:
         f"[量化日报] {datetime.now().strftime('%Y-%m-%d')} 10策略双模式模拟 (起始{ctx['sim_start']})", html_perf)
     logger.info("Performance: saved %s, email %s", p2, "OK" if ok2 else "FAIL")
 
-    logger.info("═══ 4/4 WeChat push ═══")
-    from notify.wechat_pushplus import send_wechat
-    state = ctx["state"]
-    keys = sorted(state["strategies"], key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
-    lines = [f"<h3>📊 量化日报 {ctx['latest_date']}</h3>",
-             f"<p>市场: {ctx['market']['label']} | 模拟起始 {ctx['sim_start']} ({ctx['n_days']}日) | "
-             f"基准 {state['strategies'][keys[0]]['equal']['bench_ret']:+.2f}%</p>",
-             "<table border='1' cellpadding='4' style='border-collapse:collapse;font-size:12px'>"
-             "<tr><th>策略</th><th>累计%</th><th>Sharpe</th></tr>"]
-    for k in keys:
-        e = state["strategies"][k]["equal"]
-        lines.append(f"<tr><td>{state['strategies'][k]['label']}</td>"
-                     f"<td>{e['total_return']:+.2f}%</td><td>{e['sharpe']:.3f}</td></tr>")
-    lines.append("</table><p style='color:#999'>详见邮件完整报告</p>")
-    send_wechat(f"[量化日报] {datetime.now().strftime('%Y-%m-%d')}", "".join(lines))
+    logger.info("═══ 4/4 WeCom push ═══")
+    from notify.wechat_wecom import build_daily_wecom, send_wecom_markdown
+    send_wecom_markdown(build_daily_wecom(ctx))
 
     logger.info("═══ Done in %.1fs ═══", time.time() - t0)
 

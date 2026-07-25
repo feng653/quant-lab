@@ -18,10 +18,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.strategies.registry import REGISTRY, get_enabled_strategies, get_spec, is_enabled, scan_strategies
 from services import trade_db
 from services.data_service import auto_update, trading_days, load_pool
 from services.market_service import benchmark_window, classify_market
-from services.signal_service import ALL_STRATEGIES, STRATEGY_META, generate_all_signals
+from services.signal_service import generate_all_signals
 from services.sim_engine import INITIAL_CASH, MODES, simulate_strategy, summary_metrics
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,13 @@ def get_sim_start() -> str:
 
 
 def run_simulation(strategies: list[str] | None = None, update_data: bool = True) -> dict:
-    """Full pipeline. Returns context for email builders and the dashboard."""
-    strategies = strategies or ALL_STRATEGIES
+    """Full pipeline. Returns context for email builders and the dashboard.
+
+    Strategy set comes from the registry (enabled ones). Disabled strategies
+    keep their historical DB rows and appear in state as {"disabled": true}.
+    """
+    scan_strategies()
+    strategies = strategies or get_enabled_strategies()
 
     # 1) data
     if update_data:
@@ -75,27 +81,31 @@ def run_simulation(strategies: list[str] | None = None, update_data: bool = True
         raise RuntimeError(f"No trading days on/after simulation_start {sim_start}")
     logger.info("Simulation window: %s → %s (%d days)", sim_start, sim_dates[-1].date(), len(sim_dates))
 
-    # 3) signals (all 10 strategies; ML cached across runs)
-    all_sigs = generate_all_signals(pivot, sim_start, strategies)
+    # 3) signals (enabled strategies; ML cached across runs)
+    all_sigs = generate_all_signals(pivot, sim_start, strategies, df=df)
 
     # 4) benchmark
     bench = benchmark_window(sim_start)
     bench_start_val = float(bench.iloc[0]) if len(bench) else None
 
-    # 5) simulate
+    # 5) simulate (per-strategy rebalance_days / max_positions from spec)
     trade_db.reset_run(strategies)
     state = {"meta": {"simulation_start": sim_start, "pool": POOL,
                       "initial_cash": INITIAL_CASH, "modes": list(MODES),
+                      "disabled": [k for k in REGISTRY if not is_enabled(k)],
                       "updated": datetime.now().isoformat()},
              "strategies": {}}
 
     for sn in strategies:
+        spec = get_spec(sn)
         sigs = all_sigs.get(sn, {})
-        logger.info("Simulating %s (%d signal days)...", sn, len(sigs))
+        logger.info("Simulating %s (%d signal days, rb=%d)...", sn, len(sigs), spec.rebalance_days)
         res = simulate_strategy(pivot, sigs, sn, sim_dates,
-                                bench_start=bench_start_val, benchmark=bench)
-        entry = {"label": STRATEGY_META[sn]["label"], "cat": STRATEGY_META[sn]["cat"],
-                 "desc": STRATEGY_META[sn]["desc"]}
+                                bench_start=bench_start_val, benchmark=bench,
+                                rebalance_days=spec.rebalance_days,
+                                max_positions=spec.max_positions)
+        entry = {"label": spec.label, "cat": spec.category, "desc": spec.desc,
+                 "rebalance_days": spec.rebalance_days, "disabled": False}
         for mode in MODES:
             r = res[mode]
             trade_db.insert_trades(r["trades"])
@@ -109,6 +119,29 @@ def run_simulation(strategies: list[str] | None = None, update_data: bool = True
                 "equity": [s["equity"] for s in r["snapshots"]],
                 "bench_ret": round((bench.iloc[-1] / bench_start_val - 1) * 100, 2) if bench_start_val else 0,
             }
+        state["strategies"][sn] = entry
+
+    # 6) disabled strategies: preserve latest metrics from DB, mark disabled
+    for sn in [k for k in REGISTRY if not is_enabled(k)]:
+        snaps = trade_db.get_snapshots(strategy=sn)
+        spec = get_spec(sn)
+        if snaps.empty or spec is None:
+            continue
+        entry = {"label": spec.label, "cat": spec.category, "desc": spec.desc,
+                 "disabled": True, "note": spec.note}
+        for mode in MODES:
+            sub = snaps[snaps["mode"] == mode]
+            if sub.empty:
+                continue
+            m = summary_metrics(sub.to_dict("records"))
+            entry[mode] = {**m,
+                           "costs": {"commission": 0, "stamp_duty": 0, "slippage": 0, "total": 0},
+                           "final_equity": float(sub["equity"].iloc[-1]),
+                           "cash": float(sub["cash"].iloc[-1]),
+                           "positions": {},
+                           "dates": sub["date"].tolist(),
+                           "equity": sub["equity"].tolist(),
+                           "bench_ret": round(float(sub["bench_ret"].iloc[-1]) * 100, 2)}
         state["strategies"][sn] = entry
 
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False))

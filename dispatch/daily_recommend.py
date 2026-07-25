@@ -60,7 +60,8 @@ def build_recommend_html(ctx: dict) -> str:
     prices = _latest_prices(pivot)
     exposure = _current_exposure(pivot)
 
-    keys = sorted(state["strategies"], key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
+    keys = sorted([k for k in state["strategies"] if not state["strategies"][k].get("disabled")],
+                  key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
     labels = {k: state["strategies"][k]["label"] for k in keys}
 
     # per-strategy signal snapshot at latest date
@@ -140,7 +141,8 @@ def build_recommend_html(ctx: dict) -> str:
         f"<td>{len(strat_buys[k])}</td><td>{len(strat_sells[k])}</td><td>{len(state['strategies'][k]['equal']['positions'])}</td></tr>"
         for k in keys)
 
-    regime_strats = ", ".join(labels[s] for s in market.get("strategies", []) if s in labels)
+    regime_strats = ", ".join(labels[s] for s in market.get("strategies", [])
+                              if s in labels and not state["strategies"][s].get("disabled"))
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{{font-family:'Segoe UI','Microsoft YaHei',sans-serif;margin:20px;background:#f0f2f5}}

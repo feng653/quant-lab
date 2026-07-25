@@ -1,57 +1,34 @@
-"""
-MACD Signal strategy.
-
-Source: je-suis-tm/quant-trading ★ 10.4k
-Logic: DIF crosses above DEA → golden cross (buy); DIF below DEA → death cross (sell).
-"""
+"""MACD Signal — DIF/DEA golden cross momentum entry."""
 
 from __future__ import annotations
 
-from typing import Any
-
-import numpy as np
 import pandas as pd
 
-from strategies.base import BaseStrategy, StrategyMeta
-from strategies.stars_tags import STRATEGY_MAP
+from core.strategies.registry import register_strategy
 
 
-class MACDStrategy(BaseStrategy):
-    meta = STRATEGY_MAP["macd_signal"]
-
-    def __init__(self, pool_name: str = "csi800", fast: int = 12, slow: int = 26, signal: int = 9) -> None:
-        super().__init__(pool_name)
-        self.fast = fast
-        self.slow = slow
-        self.signal_period = signal
-        self.meta.params = {"fast": fast, "slow": slow, "signal": signal}
-
-    def _ema(self, series: pd.Series, span: int) -> pd.Series:
-        return series.ewm(span=span, adjust=False).mean()
-
-    def prepare_data(self, df: pd.DataFrame) -> None:
-        self.df = df.sort_values(["code", "date"]).copy()
-        grouped = self.df.groupby("code")["close"]
-        ema_fast = grouped.transform(lambda x: self._ema(x, self.fast))
-        ema_slow = grouped.transform(lambda x: self._ema(x, self.slow))
-        self.df["dif"] = ema_fast - ema_slow
-        self.df["dea"] = self.df.groupby("code")["dif"].transform(
-            lambda x: self._ema(x, self.signal_period)
-        )
-        self.df["macd_bar"] = 2 * (self.df["dif"] - self.df["dea"])
-        self.df["golden"] = (
-            (self.df["dif"] > self.df["dea"]) & (self.df["dif"].shift(1) <= self.df["dea"].shift(1))
-        )
-        self.df["death"] = (
-            (self.df["dif"] < self.df["dea"]) & (self.df["dif"].shift(1) >= self.df["dea"].shift(1))
-        )
-
-    def generate_signals(self) -> dict[str, list[dict[str, Any]]]:
-        signals: dict[str, list[dict[str, Any]]] = {}
-        for _, row in self.df[self.df["golden"]].iterrows():
-            d = str(row["date"].date())
-            signals.setdefault(d, []).append({"code": row["code"], "action": "buy", "weight": 1.0})
-        for _, row in self.df[self.df["death"]].iterrows():
-            d = str(row["date"].date())
-            signals.setdefault(d, []).append({"code": row["code"], "action": "sell"})
-        return signals
+@register_strategy(
+    key="macd_signal", label="MACD", category="technical",
+    desc="趋势+动量, 三重确认",
+    params={
+        "fast": {"type": "int", "default": 12, "min": 3, "max": 50, "desc": "DIF 快线 EMA"},
+        "slow": {"type": "int", "default": 26, "min": 10, "max": 100, "desc": "DIF 慢线 EMA"},
+        "signal": {"type": "int", "default": 9, "min": 2, "max": 30, "desc": "DEA 信号线"},
+    },
+)
+def signals_macd(pivot: pd.DataFrame, params: dict | None = None) -> dict:
+    p = params or {}
+    fast, slow, sig = int(p.get("fast", 12)), int(p.get("slow", 26)), int(p.get("signal", 9))
+    ss: dict[str, list] = {}
+    for code in pivot.columns:
+        s = pivot[code].dropna()
+        if len(s) < slow + sig + 15:
+            continue
+        ema_f = s.ewm(span=fast, adjust=False).mean()
+        ema_s = s.ewm(span=slow, adjust=False).mean()
+        dif = ema_f - ema_s
+        dea = dif.ewm(span=sig, adjust=False).mean()
+        golden = (dif > dea) & (dif.shift(1) <= dea.shift(1))
+        for d_ in golden[golden].index:
+            ss.setdefault(str(d_.date()), []).append({"code": code, "action": "buy", "weight": 0.05})
+    return ss

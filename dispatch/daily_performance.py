@@ -42,8 +42,14 @@ def build_performance_html(ctx: dict, ai_text: str | None = None) -> str:
     today = datetime.now().strftime("%Y-%m-%d"); now = datetime.now().strftime("%H:%M")
     bench_ret = next(iter(state["strategies"].values()))["equal"]["bench_ret"] if state["strategies"] else 0
 
-    # ── sort strategies by equal-mode sharpe ──
-    keys = sorted(state["strategies"], key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
+    # ── sort strategies by equal-mode sharpe (enabled only; disabled listed separately) ──
+    disabled = {k: v for k, v in state["strategies"].items() if v.get("disabled")}
+    keys = sorted([k for k in state["strategies"] if k not in disabled],
+                  key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
+    disabled_note = ""
+    if disabled:
+        parts = [f"{v['label']}（{v.get('note', '已停用')}）" for v in disabled.values()]
+        disabled_note = "<p style='color:#999;font-size:11px'>已停用策略（保留历史，不再模拟/推荐）: " + " | ".join(parts) + "</p>"
 
     # ── overview cards ──
     total_assets = sum(state["strategies"][k]["equal"]["final_equity"] for k in keys)
@@ -141,7 +147,8 @@ def build_performance_html(ctx: dict, ai_text: str | None = None) -> str:
             for _, t in tr_today.iterrows())
 
     # ── market regime card ──
-    regime_strats = ", ".join(state["strategies"][s]["label"] for s in market.get("strategies", []) if s in state["strategies"])
+    regime_strats = ", ".join(state["strategies"][s]["label"] for s in market.get("strategies", [])
+                              if s in state["strategies"] and not state["strategies"][s].get("disabled"))
     ai_block = f'<div class="card"><h2>🤖 AI 市场评论</h2><p style="color:#333;font-size:13px;line-height:1.9">{ai_text}</p></div>' if ai_text else ""
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -206,6 +213,7 @@ td{{padding:7px 6px;text-align:center;border-bottom:1px solid #e8e8e8;font-size:
 
 {ai_block}
 
+{disabled_note}
 <div class="card"><h2>⚠️ 风险提示</h2><p style='color:#666;font-size:11px;line-height:1.7'>
 ⛔ 本报告由量化模型自动生成, 全部为模拟交易, 不构成投资建议。模拟起始 {sim_start}, 历史表现不代表未来收益。
 交易成本已计入(佣金0.1%双边+印花税0.1%卖出+滑点0.1%)。Pairs策略需要做空能力, 其模拟结果仅供参考。</p></div>
@@ -217,7 +225,8 @@ def build_ai_context(ctx: dict) -> str:
     lines = [f"市场环境: {m['label']}, 中证500近20日{m['ret_20d']}%, 近60日{m['ret_60d']}%, 20日年化波动率{m['vol_20d']}%",
              f"模拟起始: {ctx['sim_start']}, 已运行{ctx['n_days']}个交易日, 基准中证500同期{ctx['benchmark'].iloc[-1]/ctx['benchmark'].iloc[0]*100-100:+.2f}%",
              "策略表现(等权, 累计收益/Sharpe):"]
-    keys = sorted(state["strategies"], key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
+    keys = sorted([k for k in state["strategies"] if not state["strategies"][k].get("disabled")],
+                  key=lambda k: state["strategies"][k]["equal"]["sharpe"], reverse=True)
     for k in keys:
         e = state["strategies"][k]["equal"]
         lines.append(f"  {state['strategies'][k]['label']}: {e['total_return']:+.2f}% (Sharpe {e['sharpe']:+.2f}, MaxDD {e['max_dd']:+.1f}%)")

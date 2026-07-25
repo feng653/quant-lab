@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "dispatch"))
 
 from services import trade_db  # noqa: E402
-from services.signal_service import STRATEGY_META  # noqa: E402
+from services.signal_service import strategy_meta  # noqa: E402
 from services.sim_engine import INITIAL_CASH, summary_metrics  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -43,7 +43,7 @@ def build_section() -> str:
     n_days = snaps["date"].nunique()
     bench_ret = None
     rows = []
-    for sn, meta in STRATEGY_META.items():
+    for sn, meta in strategy_meta().items():
         row = {"label": meta["label"]}
         for mode in ("equal", "adaptive"):
             sub = snaps[(snaps["strategy"] == sn) & (snaps["mode"] == mode)]
