@@ -17,7 +17,7 @@
 - [x] A/B 仓位对比自动写入 PERFORMANCE_ANALYSIS.md
 - [x] 推荐邮件: 10 策略完整操作建议 (买入代码×股数×金额 + 卖出 + 持仓)
 - [x] 跨策略共识推荐 (≥2策略)
-- [x] Flask Web 仪表盘 (dispatch/web/app.py, http://localhost:8080)
+- [x] Flask Web 仪表盘 (dispatch/web/app.py, http://localhost:8600, 端口可用 DASH_PORT 配置)
 - [x] AI 市场评论 (DeepSeek API, 读 DEEPSEEK_API_KEY 环境变量)
 - [x] LSTM/Transformer 真实序列模型 (2层LSTM / 2层TransformerEncoder, walk-forward 月度重训)
 - [x] 微信 PushPlus 推送接口 (notify/wechat_pushplus.py)

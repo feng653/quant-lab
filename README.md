@@ -30,7 +30,7 @@ cp .env.example .env   # fill QQ mail / DEEPSEEK_API_KEY / PUSHPLUS_TOKEN
 
 # ── dispatch system (daily) ──
 python dispatch/run_daily.py        # update data → simulate 10 strategies → 2 emails + WeChat
-python dispatch/web/app.py          # web dashboard → http://localhost:8080
+python dispatch/web/app.py          # web dashboard → http://localhost:8600
 
 # ── research system ──
 python research/run_backtest.py     # full-history backtest (all strategies, both pools)

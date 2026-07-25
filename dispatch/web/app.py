@@ -1,7 +1,10 @@
 """
 Web dashboard — browse every simulated operation and strategy curve any time.
 
-  python dispatch/web/app.py   →   http://localhost:8080
+  python dispatch/web/app.py   →   http://localhost:8600
+
+Port: 8600 by default (8080 conflicts with qBittorrent). Override with
+DASH_PORT in .env or environment, or `--port N` CLI argument.
 
 Pages:
   /                     overview: market, strategy cards, comparison chart, latest trades
@@ -287,5 +290,19 @@ def api_summary():
     })
 
 
+def _get_port() -> int:
+    for i, a in enumerate(sys.argv):
+        if a == "--port" and i + 1 < len(sys.argv):
+            return int(sys.argv[i + 1])
+    env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("DASH_PORT") and "=" in line:
+                return int(line.split("=", 1)[1].strip().strip('"').strip("'"))
+    import os
+    return int(os.environ.get("DASH_PORT", "8600"))
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8080, debug=False)
+    app.run(host="127.0.0.1", port=_get_port(), debug=False)
