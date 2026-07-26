@@ -42,53 +42,9 @@ LABELS = {k: v["label"] for k, v in STRATEGY_META.items()}
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
           "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 
-BASE_CSS = """
-:root{--bg:#f0f2f5;--card:#fff;--ink:#1a1a2e;--sub:#666;--line:#e8e8e8;
---blue:#4472C4;--green:#2e7d32;--red:#c62828;--radius:10px;--shadow:0 2px 8px rgba(0,0,0,0.08)}
-*{box-sizing:border-box}
-body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;margin:0;background:var(--bg);color:var(--ink)}
-nav{background:var(--ink);color:#fff;padding:12px 24px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-nav a{color:#cfd8dc;text-decoration:none;font-size:14px;padding:4px 6px;border-radius:6px}
-nav a:hover{color:#fff;background:rgba(255,255,255,0.08)}
-nav .brand{font-weight:bold;font-size:16px;color:#ffd54f;margin-right:8px}
-.wrap{max-width:1280px;margin:20px auto;padding:0 16px}
-.card{background:var(--card);border-radius:var(--radius);padding:16px;margin:12px 0;box-shadow:var(--shadow)}
-.card h3{margin-top:0}
-table{border-collapse:collapse;width:100%}
-th{background:var(--blue);color:#fff;padding:8px 6px;font-size:12px}
-td{padding:6px;text-align:center;border-bottom:1px solid var(--line);font-size:12px}
-.green{color:var(--green);font-weight:bold}.red{color:var(--red);font-weight:bold}
-.grid{display:flex;flex-wrap:wrap;gap:12px}
-.scard{flex:1;min-width:200px;background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
-.scard h3{margin:0 0 6px 0;font-size:15px}
-.scard .big{font-size:22px;font-weight:bold}
-.scard .sub{color:var(--sub);font-size:11px;line-height:1.7}
-.navcard{flex:1;min-width:180px;max-width:240px;background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);text-align:center;text-decoration:none;color:var(--ink);transition:transform .15s}
-.navcard:hover{transform:translateY(-3px);box-shadow:0 6px 16px rgba(0,0,0,0.12)}
-.navcard .ico{font-size:30px}.navcard .t{font-weight:bold;margin:8px 0 4px}.navcard .d{color:var(--sub);font-size:11px;line-height:1.6}
-form.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
-select,input{padding:5px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px}
-button{padding:6px 16px;background:var(--blue);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px}
-button:hover{filter:brightness(1.1)}
-img{max-width:100%;border-radius:6px}
-iframe.report{border:1px solid var(--line);border-radius:var(--radius);width:100%;height:75vh;background:#fff}
-.badge-off{color:#999;background:#eee;border-radius:4px;padding:1px 6px;font-size:10px}
-"""
-
-NAV_ITEMS = [("/", "🏠 主页"), ("/overview", "📊 总览"), ("/strategies", "🎛️ 策略管理"),
-             ("/lab", "🧪 实验室"), ("/assistant", "🤖 AI助手"), ("/trades", "📝 成交记录"),
-             ("/compare", "📈 对比"), ("/reports", "📁 报告"), ("/jobs", "🧵 任务"), ("/scheduler", "⏰ 调度")]
-
-
-def nav(active: str = "") -> str:
-    links = "".join(f"<a href='{u}' style='{'color:#fff;background:rgba(255,255,255,0.12)' if u==active else ''}'>{t}</a>"
-                    for u, t in NAV_ITEMS)
-    return f"<nav><span class='brand'>📊 quant-lab</span>{links}</nav>"
-
-
-def page(title: str, body: str, active: str = "") -> str:
-    return (f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>{title} - quant-lab</title>"
-            f"<style>{BASE_CSS}</style></head><body>{nav(active)}<div class='wrap'>{body}</div></body></html>")
+# page shell / CSS / nav now live in web.ui.layout — imported here so the
+# existing `from web.app import page` calls in blueprints keep working.
+from web.ui.layout import BASE_CSS, NAV_ITEMS, nav, page  # noqa: E402,F401
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -473,10 +429,12 @@ def _register_blueprints():
     from web.assistant import bp as assistant_bp
     from web.lab import bp as lab_bp
     from web.reports import bp as reports_bp
+    from web.research import bp as research_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(assistant_bp)
     app.register_blueprint(lab_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(research_bp)
 
 
 _register_blueprints()

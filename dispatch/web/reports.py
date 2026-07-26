@@ -1,4 +1,4 @@
-"""Reports blueprint — daily report archive browsing + latest embedding."""
+﻿"""Reports blueprint — daily report archive browsing + latest embedding."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def latest_report_path(rtype: str) -> Path | None:
 
 @bp.route("/reports")
 def reports_list():
-    from web.app import page
+    from web.ui.layout import page
     rows = "".join(
         f"<tr><td>{r['date']}</td>"
         f"<td>{'📈 推荐' if r['type']=='recommend' else ('📊 表现' if r['type']=='performance' else r['type'])}</td>"

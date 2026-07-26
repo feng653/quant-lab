@@ -1,4 +1,4 @@
-"""Admin blueprint — strategy management, scheduler, job center."""
+﻿"""Admin blueprint — strategy management, scheduler, job center."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def _param_input(key: str, pname: str, schema: dict, value) -> str:
 
 @bp.route("/strategies")
 def strategies_page():
-    from web.app import page
+    from web.ui.layout import page
     scan_strategies()
     flash = request.args.get("msg", "")
     flash_html = f"<div class='card' style='background:#e8f5e9;color:#2e7d32'>{flash}</div>" if flash else ""
@@ -119,7 +119,7 @@ def strategy_ai_advice(key: str):
 @bp.route("/scheduler")
 def scheduler_page():
     from services.scheduler import scheduler_status
-    from web.app import page
+    from web.ui.layout import page
     st = scheduler_status()
     job_rows = "".join(f"<tr><td>{j['name']}</td><td>{j['id']}</td><td>{j['next_run']}</td></tr>"
                        for j in st["jobs"]) or "<tr><td colspan='3'>调度器未运行</td></tr>"
@@ -156,7 +156,7 @@ def scheduler_run_daily():
 @bp.route("/jobs")
 def jobs_page():
     from services import job_runner
-    from web.app import page
+    from web.ui.layout import page
     rows = "".join(
         f"<tr><td><a href='/jobs/{j.id}'>{j.id}</a></td><td>{j.type}</td><td>{j.title}</td>"
         f"<td>{'🟢运行中' if j.status=='running' else ('✅完成' if j.status=='done' else ('❌失败' if j.status=='failed' else '⏳等待'))}</td>"
@@ -171,7 +171,7 @@ def jobs_page():
 @bp.route("/jobs/<job_id>")
 def job_detail(job_id: str):
     from services import job_runner
-    from web.app import page
+    from web.ui.layout import page
     j = job_runner.get_job(job_id)
     if j is None:
         return page("任务不存在", "<div class='card'>任务不存在或已被清理</div>"), 404

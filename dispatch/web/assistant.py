@@ -1,4 +1,4 @@
-"""Assistant blueprint — natural-language data & task management chat."""
+﻿"""Assistant blueprint — natural-language data & task management chat."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ bp = Blueprint("assistant", __name__)
 @bp.route("/assistant", methods=["GET", "POST"])
 def assistant_page():
     from services import ai_assistant
-    from web.app import page
+    from web.ui.layout import page
 
     if request.method == "POST":
         if request.form.get("clear"):

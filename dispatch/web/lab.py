@@ -1,4 +1,4 @@
-"""Lab blueprint — data management, ML training, arbitrary-range backtests."""
+﻿"""Lab blueprint — data management, ML training, arbitrary-range backtests."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _data_status() -> dict:
 
 @bp.route("/lab")
 def lab_page():
-    from web.app import page
+    from web.ui.layout import page
     scan_strategies()
     ds = _data_status()
 

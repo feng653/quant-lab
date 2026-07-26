@@ -3,76 +3,91 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
-Multi-strategy quantitative research + daily simulation & dispatch pipeline for Chinese A-shares.
+多策略 A 股量化研究 + 每日模拟交易分发系统。
 
-**10 strategies · CSI 500/800 · 2019-2026 · daily simulated trading with email/WeChat reports.**
+**11 个策略 · CSI 500/800 · 2019-2026 · 实验可积累的研究工作台 + 每日邮件/微信报告。**
 
 ---
 
-## Repository Layout
+## 仓库结构
 
 ```
-core/        shared layer — config, data fetchers, strategy library, backtest engine
-research/    research system — full-history backtests, evaluation, reports, docs
-dispatch/    dispatch system — daily simulation, emails, WeChat, web dashboard
-execution/   live-trading adapters (vnpy / xtquant, reserved)
-scripts/     ops tools (A/B backtest, cleanup)
-tests/       test suites
+core/        共享层 — 配置、数据抓取、策略库（注册中心）、回测引擎
+dispatch/    分发系统 — 每日模拟、邮件、微信、Web 服务
+  ├── kernel/     执行内核（纯 Python）：sim_engine（成本模型参数化）、
+  │               统一 runner（RunSpec→RunResult）、data/signal 服务
+  ├── research/   研究层：实验存储（research.db）、完整指标套件（36 项）
+  ├── services/   生产服务（兼容层，逐步向 kernel 迁移）
+  ├── state/      trades.db（生产战绩）+ research.db（实验库，物理隔离）
+  └── web/        Flask 一站式服务（ui/ 布局层 + 蓝图）
+research/    历史研究系统 — 全历史回测脚本、评估、报告、文档
+execution/   实盘接入层（vnpy / xtquant，预留）
+scripts/     运维工具（A/B 回测、数据清理）
+tests/       测试
 ```
 
-## Quick Start
+## 快速开始
 
 ```bash
 git clone https://github.com/feng653/quant-lab.git
 cd quant-lab
 pip install -r requirements.txt
-cp .env.example .env   # fill QQ mail / DEEPSEEK_API_KEY / WECOM_WEBHOOK_URL
+cp .env.example .env   # 填写 QQ 邮箱 / DEEPSEEK_API_KEY / WECOM_WEBHOOK_URL
 
-# ── one-stop web service (dashboard + scheduler, recommended) ──
+# ── 一站式 Web 服务（仪表盘 + 调度器，推荐）──
 python dispatch/web/app.py          # → http://localhost:8600
 
-# ── or manual daily run ──
-python dispatch/run_daily.py        # update data → simulate → 2 emails + WeCom
+# ── 或手动跑每日 pipeline ──
+python dispatch/run_daily.py        # 更新数据 → 模拟 → 双邮件 + 企业微信
 
-# ── research system ──
-python research/run_backtest.py     # full-history backtest (all strategies, both pools)
-python scripts/ab_position_backtest.py   # A/B position sizing analysis
-python scripts/gbr_validation.py         # AM GBR validation report
+# ── 历史研究系统 ──
+python research/run_backtest.py     # 全历史回测（全策略 × 双股票池）
+python scripts/gbr_validation.py    # AM GBR 验证报告
 ```
 
-## Daily Dispatch System
+## 研究工作台（/research）
 
-Simulation starts from a **fixed origin (2026-05-25)**, every strategy runs an
-independent 1,000,000 CNY account in **two sizing modes** (equal-weight vs
-adaptive volatility). All trades are recorded in SQLite (`dispatch/state/trades.db`).
+每个回测结果**自动落库**（`dispatch/state/research.db`），可查询、可排序、可对比、可复现：
 
-- **One-stop web service** (`QuantWeb` at-logon task, port 8600): hosts the
-  dashboard AND the APScheduler that runs the daily 15:35 pipeline
-  (data update → walk-forward signals → re-simulation → recommendation email
-  + performance email + WeCom push)
-- **Strategy registry**: strategies live in `core/strategies/` with a
-  `@register_strategy` decorator — auto-discovered by the web admin where you
-  toggle enablement, edit params, and get AI-recommended params (DeepSeek)
-- **Web pages**: home (latest report) / overview / strategies admin / lab
-  (data, 1-click train, 1-click backtest) / AI assistant (natural-language
-  data management) / trades (round-trip P&L, group views, CSV) / compare /
-  reports archive / jobs / scheduler
-- **11 strategies**: 4 technical + 2 portfolio (pairs disabled — no shorting
-  in A-shares) + 4 ML walk-forward + AM GBR (migrated from AlphaMaster,
-  [validated](research/docs/GBR_VALIDATION.md): claimed Sharpe 3.12 debunked,
-  real alpha found at monthly rebalancing)
+| 页面 | 作用 |
+|---|---|
+| `/research` | 实验发射台：策略 × 窗口 × 股票池 × 模式，一键发射 |
+| `/research/runs` | 实验排行榜：36 项指标可排序，按策略/标签/池筛选 |
+| `/research/run/<id>` | 单实验深潜：净值+回撤带图、全指标卡、成交明细、数据/代码版本 |
+| `/research/compare?runs=a,b` | 头对头：指标差异表 + 归一化净值叠加 |
 
-## WeCom Push Setup (企业微信推送)
+每个实验记录 `data_version`（数据指纹：行数|股票数|截止日）与 `code_version`
+（git HEAD），结果永远可追溯。实验室 `/lab` 的一键回测同样自动入库。
 
-1. Install 企业微信 App, register a personal team (any name, no verification)
-2. Create a group → 群设置 → 群机器人 → 添加 → copy webhook URL
-3. Add to `.env`: `WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/...`
+## 每日分发系统
 
-Messages only pass through Tencent servers — no third-party relay (unlike PushPlus).
+从**固定起点（2026-05-25）**开始模拟，每个策略独立运行 100 万元账户，
+**两种仓位模式**（等权 vs 波动率自适应），全部成交逐笔记录于
+`dispatch/state/trades.db`（与研究实验库物理隔离）。
 
-## Backtest Results (2024-01 ~ 2026-06, Complete Data)
+- **一站式 Web 服务**（QuantWeb 登录自启，端口 8600）：托管仪表盘和
+  APScheduler，每日 15:35 自动跑 pipeline（数据更新 → walk-forward 信号 →
+  重模拟 → 推荐邮件 + 表现邮件 + 企业微信推送）
+- **策略注册中心**：策略放在 `core/strategies/` 用 `@register_strategy`
+  装饰器自动发现；Web 管理页可开关启停、调参数、获取 AI 推荐参数（DeepSeek）
+- **Web 页面**：主页（最新报告）/ 总览 / 策略管理 / **研究工作台** / 实验室
+  （数据、一键训练、一键回测）/ AI 助手 / 成交记录 / 对比 / 报告归档 /
+  任务 / 调度
+- **11 个策略**：4 技术 + 2 组合（pairs 已停用——A 股无法做空）+ 4 ML
+  walk-forward + AM GBR（迁移自 AlphaMaster，[已验证](research/docs/GBR_VALIDATION.md)：
+  宣称 Sharpe 3.12 被证伪，真实 alpha 在月频调仓）
 
-| Rank | Strategy | Pool | Annual% | Sharpe | MaxDD | Source |
+## 企业微信推送设置
+
+1. 安装企业微信 App，注册个人团队（任意名称，无需认证）
+2. 建群 → 群设置 → 群机器人 → 添加 → 复制 webhook 地址
+3. 写入 `.env`：`WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/...`
+
+消息只经过腾讯服务器，无第三方中转（不同于 PushPlus）。
+
+## 回测结果（2024-01 ~ 2026-06，完整数据）
+
+| 排名 | 策略 | 股票池 | 年化% | Sharpe | 最大回撤 | 来源 |
 |:---:|----------|------|--------:|-------:|------|--------|
 | 1 | **MA Cross** | CSI 800 | **+33.4** | **0.97** | -24.7% | ★10.4k |
 | 2 | **MACD Sig.** | CSI 800 | +16.0 | 0.85 | -11.2% | ★10.4k |
@@ -82,11 +97,11 @@ Messages only pass through Tencent servers — no third-party relay (unlike Push
 | 6 | Bollinger | CSI 800 | +5.8 | 0.35 | -15.3% | ★10.4k |
 | 7 | Risk Parity | CSI 500 | +5.3 | 0.24 | -10.5% | ★4.8k |
 
-[Full Performance Analysis →](research/docs/PERFORMANCE_ANALYSIS.md)
+[完整绩效分析 →](research/docs/PERFORMANCE_ANALYSIS.md)
 
-## Strategy Catalog
+## 策略目录
 
-| Strategy | Category | Source | Stars | Doc |
+| 策略 | 类别 | 来源 | Stars | 文档 |
 |----------|----------|--------|:---:|------|
 | MACD Signal | technical | je-suis-tm/quant-trading | 10.4k | [→](research/docs/strategies/04-macd-signal.md) |
 | MA Cross | technical | je-suis-tm/quant-trading | 10.4k | [→](research/docs/strategies/01-ma-cross.md) |
@@ -98,27 +113,37 @@ Messages only pass through Tencent servers — no third-party relay (unlike Push
 | Pairs Trading | portfolio | je-suis-tm/quant-trading | 10.4k | [→](research/docs/strategies/05-pairs-trading.md) |
 | Risk Parity | portfolio | PyPortfolioOpt | 4.8k | [→](research/docs/strategies/06-risk-parity.md) |
 
-## Features
+## 特性
 
-- **2 stock pools**: CSI 500 (427 stocks) + CSI 800 (687 stocks)
-- **Full 7-year data**: 2019-2026, auto-incremental daily updates
-- **Real daily simulation**: 10 strategies × 2 sizing modes, trade-level SQLite records
-- **Walk-forward ML**: LGB/XGB/LSTM/Transformer retrained monthly, no look-ahead
-- **Benchmark & cost aware**: CSI 500 buy-hold baseline, commission/stamp/slippage split
-- **Market regime**: bull/bear/choppy/high-vol classification with strategy mapping
-- **AI commentary**: DeepSeek-generated daily market review (optional)
-- **Multi-channel**: QQ email + WeChat (PushPlus) + local web dashboard
-- **A-share rules**: T+1, stamp duty, 100-share lots
+- **实验可积累**：回测结果持久化 research.db，跨次对比、排序、复现
+- **完整指标**：36 项（Sortino/Calmar/IR/Alpha/Beta/回撤时长/VaR/换手/成本拖累等）
+- **成本模型参数化**：佣金/印花税/滑点可调，支持成本敏感性分析
+- **2 个股票池**：CSI 500（427 只）+ CSI 800（687 只）
+- **7 年完整数据**：2019-2026，每日自动增量更新
+- **真实每日模拟**：11 策略 × 2 仓位模式，逐笔成交 SQLite 记录
+- **Walk-forward ML**：LGB/XGB/LSTM/Transformer 月度重训，无前视
+- **基准与成本感知**：CSI 500 买入持有基准，佣金/印花税/滑点分项
+- **市场环境分类**：牛/熊/震荡/高波动识别 + 适配策略映射
+- **AI 评论**：DeepSeek 生成每日市场点评（可选）
+- **多渠道**：QQ 邮件 + 企业微信 + 本地 Web 仪表盘
+- **A 股规则**：T+1、印花税、100 股整手
 
-## Docs
+## 已知局限
 
-| Document | Content |
+- **幸存者偏差**：akshare 只提供当前指数成分股，历史回测使用当前成分
+  （P3 计划修复）；每个实验结论需带着这个前提阅读
+- 前复权价格以最新交易日为锚，公司行为可能导致历史行轻微漂移（已接受的折衷）
+
+## 文档
+
+| 文档 | 内容 |
 |----------|---------|
-| [QUICKSTART.md](QUICKSTART.md) | Setup & usage guide |
-| [TODO.md](TODO.md) | Feature backlog |
-| [research/docs/ARCHITECTURE.md](research/docs/ARCHITECTURE.md) | Architecture & data flow |
-| [research/docs/PERFORMANCE_ANALYSIS.md](research/docs/PERFORMANCE_ANALYSIS.md) | Performance analysis + A/B sizing |
-| [research/docs/strategies/](research/docs/strategies/) | 10 per-strategy documents |
+| [CYCLE.md](CYCLE.md) | **每次迭代必做清单**（开发流程） |
+| [QUICKSTART.md](QUICKSTART.md) | 安装与使用指南 |
+| [TODO.md](TODO.md) | 功能规划与已完成记录 |
+| [research/docs/ARCHITECTURE.md](research/docs/ARCHITECTURE.md) | 架构与数据流 |
+| [research/docs/PERFORMANCE_ANALYSIS.md](research/docs/PERFORMANCE_ANALYSIS.md) | 绩效分析 + A/B 仓位 |
+| [research/docs/strategies/](research/docs/strategies/) | 10 篇策略分文档 |
 
 ## License
 

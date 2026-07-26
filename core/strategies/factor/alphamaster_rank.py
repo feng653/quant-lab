@@ -6,10 +6,12 @@ pipeline in project3 claimed Sharpe 3.12 — but its backtest traded at the
 same close whose features generated the signal (implicit look-ahead) and
 used 0.03% commission with daily full rebalancing.
 
-Here it runs under quant-lab's strict execution semantics:
-signals T-1 → execution T close, commission 0.1% + stamp 0.1% + slippage 0.1%.
-Default rebalance_days=1 reproduces the original daily rebalancing; compare
-with rebalance_days=30 in the validation report (research/docs/GBR_VALIDATION.md).
+Validation under quant-lab's strict execution semantics (T-1 signal → T close
+execution, commission 0.1% + stamp 0.1% + slippage 0.1%) revealed:
+- Daily rebalancing (rb=1): -75.64% cumulative, Sharpe -2.521 (costs destroyed returns)
+- Monthly rebalancing (rb=30): +60.30% cumulative, Sharpe +0.944 (real alpha emerges)
+
+Default: rebalance_days=30. See research/docs/GBR_VALIDATION.md for full analysis.
 """
 
 from core.strategies.registry import register_ml_strategy

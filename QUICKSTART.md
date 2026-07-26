@@ -9,7 +9,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## 2. 配置QQ邮箱通知
+## 2. 配置通知渠道
 
 复制 `.env.example` 为 `.env`，填写：
 
@@ -17,146 +17,139 @@ pip install -r requirements.txt
 QQ_EMAIL=你的QQ号@qq.com
 QQ_AUTH_CODE=QQ邮箱SMTP授权码
 TO_EMAIL=接收报告的邮箱
+DEEPSEEK_API_KEY=可选，AI 评论/助手用
+WECOM_WEBHOOK_URL=可选，企业微信群机器人
 ```
 
 获取授权码：QQ邮箱 → 设置 → 账户 → POP3/SMTP服务 → 生成授权码
 
-## 3. 运行命令
+## 3. 日常使用（推荐）
 
-### 查看所有策略
-
-```bash
-python research/run_backtest.py --list-strategies
-```
-
-### 完整回测 (10个策略 × CSI 500 / CSI 800)
+启动一站式 Web 服务：
 
 ```bash
-python research/run_backtest.py
+.venv\Scripts\python.exe dispatch\web\app.py    # → http://localhost:8600
 ```
 
-约10-15分钟（首次需下载完整数据，之后缓存加速），输出：
-- `research/reports/complete_report.md` — 完整对比报告
-- `research/reports/report_csi500.md` — CSI 500 单独报告
-- `research/reports/report_csi800.md` — CSI 800 单独报告
-- `research/results/all_results.json` — 详细回测数据
+（已配置 Windows 任务计划 QuantWeb 登录自启，正常情况无需手动启动。）
 
-### ML Walk-Forward 回测
+| 页面 | 用途 |
+|---|---|
+| `/` | 主页：最新推荐/表现报告 |
+| `/overview` | 策略卡片、净值对比、最新成交 |
+| `/research` | **研究发射台**：选策略/窗口/池 → 一键回测并入库 |
+| `/research/runs` | **实验排行榜**：全历史实验按指标排序筛选 |
+| `/strategies` | 策略开关、参数调整、AI 推荐参数 |
+| `/lab` | 数据面板（状态+拉取）、一键训练、一键回测（自动入库） |
+| `/trades` | 逐笔成交、分组汇总、FIFO 盈亏配对、CSV 导出 |
+| `/compare` | 生产模拟净值对比（自选策略） |
+| `/assistant` | AI 助手：自然语言管理数据与任务 |
+| `/jobs` `/scheduler` | 后台任务与调度中心 |
+
+## 4. 研究实验（命令行方式）
+
+页面发射之外，也可以脚本化发射实验（结果同样入 research.db）：
+
+```python
+import sys; sys.path.insert(0, 'dispatch')
+import services  # 路径引导，必须
+from kernel.runner import RunSpec, execute_and_save
+
+spec = RunSpec(strategy='ma_cross', start='2024-06-01', end='2024-08-31',
+               pool='csi500', mode='equal', tag='my_experiment')
+run_id = execute_and_save(spec)   # 完成后到 /research/run/<run_id> 查看
+```
+
+批量回测（实验室同源，自动入库）：
+
+```python
+from services.backtest_service import run_backtest
+run_backtest(['ma_cross', 'rsi_reversal'], '2024-06-01', pool='csi500', tag='v2')
+```
+
+## 5. 其他运行命令
+
+### 历史全量回测（旧研究系统，backtrader 引擎）
 
 ```bash
-python research/run_ml_walkforward.py
+python research/run_backtest.py    # 约10-15分钟，输出 research/reports/
 ```
 
-### 快速集成测试
+### 每日邮件（手动触发，一般不需要）
+
+```bash
+python dispatch/run_now.py          # 推荐邮件 + 表现邮件一次完成
+python dispatch/run_daily.py        # 完整每日 pipeline
+```
+
+### 集成测试
 
 ```bash
 python tests/test_integration.py
 ```
 
-### 每日推荐邮件 (手动触发)
-
-```bash
-python dispatch/daily_recommend.py
-```
-
-### 每日表现邮件 (手动触发)
-
-```bash
-python dispatch/daily_performance.py
-```
-
-### 一键双邮件 (手动触发)
-
-```bash
-python dispatch/run_now.py
-```
-
-一次性完成：推荐邮件 + 表现邮件（含图表），保存到 `dispatch/mail/YYYYMM/`
-
-## 4. Windows 定时任务
-
-```powershell
-# PowerShell 管理员运行
-$python = "D:\doc\量化\project2\.venv\Scripts\python.exe"
-$workdir = "D:\doc\量化\project2"
-
-# 每日推荐邮件 15:30
-$action1 = New-ScheduledTaskAction -Execute $python -Argument "dispatch\daily_recommend.py" -WorkingDirectory $workdir
-$trigger1 = New-ScheduledTaskTrigger -Daily -At 15:30
-Register-ScheduledTask -TaskName "QuantRecommend" -Action $action1 -Trigger $trigger1 -Force
-
-# 每日表现邮件 16:00
-$action2 = New-ScheduledTaskAction -Execute $python -Argument "dispatch\daily_performance.py" -WorkingDirectory $workdir
-$trigger2 = New-ScheduledTaskTrigger -Daily -At 16:00
-Register-ScheduledTask -TaskName "QuantPerformance" -Action $action2 -Trigger $trigger2 -Force
-```
-
-## 5. 项目结构
+## 6. 项目结构
 
 ```
 quant-lab/
 ├── .env / .env.example / .gitignore
-├── README.md / QUICKSTART.md / requirements.txt
+├── README.md / QUICKSTART.md / CYCLE.md / TODO.md / requirements.txt
 │
 ├── core/                       # 共享核心
 │   ├── config/settings.py      # 参数配置
 │   ├── data/                   # 数据管道 (AKShare + BaoStock)
-│   │   └── cache/              # 行情数据缓存 (parquet)
-│   ├── strategies/             # 10个策略
+│   │   └── cache/              # 行情缓存 (parquet)
+│   ├── strategies/             # 11 个策略（注册中心自动发现）
 │   │   ├── technical/          # MA Cross, RSI, Bollinger, MACD
-│   │   ├── factor/             # Alpha158+LGB, Alpha158+XGB
-│   │   ├── ml/                 # LSTM, Transformer
-│   │   └── portfolio/          # Pairs Trading, Risk Parity
-│   └── backtest/               # 回测引擎 (backtrader)
+│   │   ├── factor/             # AlphaMaster GBR
+│   │   ├── ml/                 # Alpha158 LGB/XGB, LSTM, Transformer
+│   │   └── portfolio/          # Pairs Trading(停用), Risk Parity
+│   └── backtest/               # 旧回测引擎 (backtrader, 历史研究用)
 │
-├── research/                   # 研究系统 (回测 + 训练 + 分析)
-│   ├── run_backtest.py         # 完整回测入口
-│   ├── run_ml_walkforward.py   # ML Walk-Forward 训练
-│   ├── run_all.py              # 6策略快速回测
-│   ├── evaluation/             # 指标计算 + 报告生成
-│   ├── results/                # 回测数据 (JSON)
-│   ├── reports/                # 回测报告 (Markdown / HTML)
-│   └── docs/                   # 文档
-│       ├── ARCHITECTURE.md
-│       ├── PERFORMANCE_ANALYSIS.md
-│       ├── COMPLETION_REPORT.md
-│       ├── strategies/         # 10个策略分文档
-│       └── resources/          # 量化资源调研
-│
-├── dispatch/                   # 信息分发系统 (邮件 + 微信 + 仪表盘)
-│   ├── daily_recommend.py      # 每日推荐邮件
-│   ├── daily_performance.py    # 每日表现邮件 (含图表)
-│   ├── run_now.py              # 手动触发双邮件
+├── dispatch/                   # 分发系统（每日模拟 + Web）
+│   ├── kernel/                 # 执行内核（纯 Python，零 Flask 依赖）
+│   │   ├── sim_engine.py       # 模拟引擎（成本模型 CostModel 参数化）
+│   │   ├── runner.py           # 统一运行接口 RunSpec → RunResult
+│   │   ├── data_service.py     # 数据访问（re-export services）
+│   │   └── signal_service.py   # 信号生成（re-export services）
+│   ├── research/               # 研究层
+│   │   ├── store.py            # 实验存储 research.db（5 表，只追加）
+│   │   └── metrics.py          # 完整指标套件（36 项）
+│   ├── services/               # 生产服务（含 sim_engine 兼容 shim）
+│   ├── state/
+│   │   ├── trades.db           # 生产战绩（每日覆盖，单时间线）
+│   │   └── research.db         # 实验库（只追加，多维实验空间）
 │   ├── charts/generator.py     # matplotlib 图表
-│   ├── notify/                 # 通知渠道
-│   │   ├── base.py             # 通知抽象
-│   │   └── email_qq.py         # QQ邮箱 SMTP
-│   ├── state/                  # 模拟账户状态
-│   │   ├── account.py
-│   │   └── strategy_state.json
-│   ├── mail/YYYYMM/            # 邮件归档 (按月分文件夹)
-│   └── web/                    # Flask 仪表盘 (预留)
+│   ├── notify/                 # 通知渠道（QQ 邮件 / 企业微信 / PushPlus）
+│   ├── mail/YYYYMM/            # 邮件归档
+│   └── web/
+│       ├── app.py              # Flask 入口（主页/总览/策略/成交/对比）
+│       ├── research.py         # 研究工作台蓝图（/research/*）
+│       ├── ui/layout.py        # 页面外壳/CSS/导航（蓝图共用）
+│       └── admin/lab/reports/assistant.py  # 其余蓝图
 │
-├── execution/                  # 实盘接入层 (预留)
-│   ├── paper_vnpy.py
-│   └── paper_xtquant.py
+├── research/                   # 历史研究系统（脚本 + 文档）
+│   ├── run_backtest.py / run_all.py
+│   ├── evaluation/             # 指标 + 报告生成
+│   ├── results/ reports/       # 回测产出
+│   └── docs/                   # 文档（架构/绩效/策略分文档）
 │
+├── execution/                  # 实盘接入层（预留）
 ├── tests/                      # 测试
-│   ├── test_integration.py
-│   └── test_backtest.py
-│
 └── scripts/                    # 运维脚本
 ```
 
-## 6. 文档索引
+## 7. 文档索引
 
 | 文档 | 内容 |
 |------|------|
-| [research/docs/ARCHITECTURE.md](research/docs/ARCHITECTURE.md) | 架构设计 + 数据流图 |
+| [CYCLE.md](CYCLE.md) | **每次迭代必做清单**（先读这个） |
+| [TODO.md](TODO.md) | 功能规划与已完成记录 |
+| [research/docs/ARCHITECTURE.md](research/docs/ARCHITECTURE.md) | 架构设计 + 数据流 |
 | [research/docs/PERFORMANCE_ANALYSIS.md](research/docs/PERFORMANCE_ANALYSIS.md) | 回测绩效全面分析 |
-| [research/docs/strategies/](research/docs/strategies/) | 10个策略分文档 |
-| [research/docs/COMPLETION_REPORT.md](research/docs/COMPLETION_REPORT.md) | 项目完整工作记录 |
+| [research/docs/GBR_VALIDATION.md](research/docs/GBR_VALIDATION.md) | GBR 策略验证（研究方法论范例） |
+| [research/docs/strategies/](research/docs/strategies/) | 10 篇策略分文档 |
 
-## 7. GitHub
+## 8. GitHub
 
 仓库地址: https://github.com/feng653/quant-lab
