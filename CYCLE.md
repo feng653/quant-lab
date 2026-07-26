@@ -40,7 +40,11 @@
 
 - [ ] **生产链路未破坏**：以下页面全部 200 ——
       `/` `/overview` `/strategies` `/trades` `/compare` `/lab` `/reports` `/jobs`
-      `/scheduler` `/assistant` `/research/` `/research/runs`
+      `/scheduler` `/assistant` `/research/` `/research/runs` `/research/run/<id>`
+      （至少测一个），`/research/compare?runs=a,b`
+- [ ] **缓存隔离未破坏**：检查 `dispatch/state/signals_cache/prod/` 和
+      `dispatch/state/signals_cache/research/` 目录各存各的，没有互相污染；
+      生产缓存文件最后修改时间在最近一次 pipeline 之后
 - [ ] **生产数值未漂移**：改了 `kernel/sim_engine.py` 的话，必须跑一次
       kernel/shim 数值一致性测试（同一 pivot+signals，新旧接口逐笔成交相等）
 - [ ] **测试脚本清理**：临时验证脚本放 `%TEMP%`，不进仓库；
@@ -76,10 +80,14 @@
 ## 六、生产链路红线（任何时候不得违反）
 
 1. **trades.db 与 research.db 物理隔离** — 生产战绩表永远不被研究实验写入
-2. **每日 15:35 pipeline 行为稳定** — 改动 kernel 层时保持
+2. **缓存 scope 分离** — 生产 pipeline 传 `cache_scope="prod"`（sim_runner.py:85），
+   实验默认 `"research"`；信号缓存与模型文件各自独立目录
+3. **每日 15:35 pipeline 行为稳定** — 改动 kernel 层时保持
    `services/sim_engine.py` shim 的默认成本常量不变（0.001/0.001/0.001）
-3. **邮件格式变化需谨慎** — 收件人每天看，版式突变要单独说明
-4. **重启 Web 服务先杀旧进程** — 否则新代码不生效且表现为"改了没反应"
+4. **参数未晋升前不影响生产** — 在 /strategies 改参数 ≠ 改生产参数；
+   生产读 deployments 表（P1 实施）或注册中心默认值（当前过渡态）
+5. **邮件格式变化需谨慎** — 收件人每天看，版式突变要单独说明
+6. **重启 Web 服务先杀旧进程** — 否则新代码不生效且表现为"改了没反应"
 
 ## 七、每日自动运行（无需人工）
 

@@ -1,6 +1,6 @@
 # 架构文档
 
-> 最后更新：2026-07-26（研究工作台 P0 落地后重写）
+> 最后更新：2026-07-26（研究工作台 P0 + ML 训练隔离完成）
 
 ## 总览
 
@@ -49,7 +49,8 @@
 | 模块 | 职责 |
 |---|---|
 | `sim_engine.py` | 确定性全窗口重模拟。**成本模型参数化**为 `CostModel(commission, slippage, stamp_duty)`，默认值 (0.001/0.001/0.001) 与原硬编码常量逐笔一致；`scaled(n)` 用于成本敏感性分析。双仓位模式：等权 / 波动率自适应 |
-| `runner.py` | 统一运行接口：`RunSpec`（策略/窗口/池/模式/成本/标签）→ `RunResult`（指标/曲线/成交/版本指纹）。`execute_and_save()` 一步执行并落库 |
+| `runner.py` | 统一运行接口：`RunSpec`（策略/窗口/池/模式/成本/标签/**实验参数**）→ `RunResult`。`execute_and_save()` 一步执行并落库，自动计算 `effective_params`（注册默认值 + RunSpec.params 覆盖）+ `params_hash` |
+| `model_store.py` | ML 模型持久化：训练产物以 `{scope}/{strategy}/{params_hash}/{retrain_date}.pkl` 落盘，附 `.json` 元数据（data_version/code_version/n_samples）。同参数二次运行直接加载，跳过重训 |
 | `data_service.py` | re-export services 的数据管道（缓存读取、增量更新、交易日历、基准） |
 | `signal_service.py` | re-export services 的信号生成（技术/因子/ML walk-forward） |
 
@@ -65,8 +66,46 @@
 | （P1）`stats.py` | Sharpe 标准误/t 值、bootstrap 置信区间、deflated Sharpe |
 | （P1）`robustness.py` | 参数扫描、成本扫描、分时段/分环境 |
 
-可复现性：每个 run 记录 `data_version`（行数|股票数|截止日的数据指纹）与
-`code_version`（git HEAD），结果永远可追溯到产生它的确切输入。
+可复现性：每个 run 记录 `data_version`（行数|股票数|截止日的数据指纹，pivot 和 raw 双格式兼容）、
+`code_version`（git HEAD）、`params_hash`（生效参数全集 MD5），结果永远可追溯到产生它的确切输入。
+
+## 缓存与训练隔离
+
+### 信号缓存（signals_cache/）
+
+路径：`state/signals_cache/{scope}/{strategy}/{params_hash}.json`
+
+- `scope ∈ {prod, research}` — 生产与实验物理隔离
+- 不同参数集天然不同文件，**无需全局失效逻辑**
+- 写入使用 `tempfile + os.replace` 原子替换，并发安全
+- 生产 pipeline 传 `cache_scope="prod"`（sim_runner.py:85），实验默认 `"research"`
+- 旧版全局缓存文件（`ml_{strategy}.json`）已废弃
+
+### 模型存储（models/）
+
+路径：`state/models/{scope}/{strategy}/{params_hash}/{retrain_date}.pkl`
+
+- 每次 walk-forward 重训后保存模型 + 元数据 JSON
+- 同参数二次运行→直接加载，跳过重训（LSTM 从约 40 秒降到秒级）
+- 使用 joblib/pickle 双 fallback 序列化
+- 元数据含 `data_version/code_version/n_samples/feature_list`，可追溯
+
+### 参数传递管道
+
+```
+RunSpec.params (用户指定超参覆盖)
+  → runner.py: generate_all_signals(pivot, start, strategies, params_overrides, cache_scope="research")
+    → signal_service: generate_all_signals → 逐策略 {**get_params(sn), **overrides.get(sn, {})}
+      → signal 策略: spec.signal_func(pivot, merged_params)
+      → ML 策略: generate_ml_signals → _ml_top_codes_at_retrains(..., params_override, cache_scope)
+            ├── 训练前: load_model(strategy, params, retrain_date, scope) → 命中则跳过
+            ├── 训练后: save_model(model, strategy, params, retrain_date, ...)
+            └── 信号缓存: signals_cache/{scope}/{strategy}/{params_hash}.json (原子写)
+  → execute_and_save: effective_params = get_params(strategy) | spec.params → 落 research.db
+```
+
+生产链路：`sim_runner.py` → `generate_all_signals(cache_scope="prod")`，信号缓存独立，
+模型缓存独立，参数来自 `deployments` 表（P1 实施）。
 
 ## Web 层（dispatch/web/）
 
@@ -136,9 +175,12 @@ AKShare (主数据源)
 BaoStock (备用)
 
 data_service.auto_update(): 比对缓存截止日与最近交易日，缺的天数多线程补齐
-signal_service: pivot(收盘价矩阵) → 各策略信号字典（ML 策略 walk-forward 重训，无前视）
+signal_service: pivot(收盘价矩阵) × 参数 = 策略信号字典
+    ├─ signal cache: state/signals_cache/{scope}/{strategy}/{params_hash}.json (原子写)
+    ├─ model store:  state/models/{scope}/{strategy}/{params_hash}/{retrain_date}.pkl (skip if hit)
+    └─ walk-forward: fd <= rt_date 严格无前视
 sim_engine: 信号 × pivot × 成本模型 → 逐日快照 + 逐笔成交
-research.metrics / store: 快照 → 36 项指标 → research.db
+research.metrics / store: 快照 → 36 项指标 → research.db (含 params_hash)
 web: research.db → 排行榜/详情/对比页
 ```
 

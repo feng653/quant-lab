@@ -15,7 +15,9 @@
 core/        共享层 — 配置、数据抓取、策略库（注册中心）、回测引擎
 dispatch/    分发系统 — 每日模拟、邮件、微信、Web 服务
   ├── kernel/     执行内核（纯 Python）：sim_engine（成本模型参数化）、
-  │               统一 runner（RunSpec→RunResult）、data/signal 服务
+  │               runner（RunSpec→RunResult 统一接口）、
+  │               model_store（ML 模型持久化，二次运行秒过）、
+  │               data/signal 服务
   ├── research/   研究层：实验存储（research.db）、完整指标套件（36 项）
   ├── services/   生产服务（兼容层，逐步向 kernel 迁移）
   ├── state/      trades.db（生产战绩）+ research.db（实验库，物理隔离）
@@ -56,8 +58,8 @@ python scripts/gbr_validation.py    # AM GBR 验证报告
 | `/research/run/<id>` | 单实验深潜：净值+回撤带图、全指标卡、成交明细、数据/代码版本 |
 | `/research/compare?runs=a,b` | 头对头：指标差异表 + 归一化净值叠加 |
 
-每个实验记录 `data_version`（数据指纹：行数|股票数|截止日）与 `code_version`
-（git HEAD），结果永远可追溯。实验室 `/lab` 的一键回测同样自动入库。
+每个实验记录 `data_version`（数据指纹）、`code_version`（git HEAD）、
+**`params_hash`**（生效参数全集 MD5），结果永远可追溯可复现。
 
 ## 每日分发系统
 
@@ -115,7 +117,9 @@ python scripts/gbr_validation.py    # AM GBR 验证报告
 
 ## 特性
 
-- **实验可积累**：回测结果持久化 research.db，跨次对比、排序、复现
+- **实验可积累**：回测结果持久化 research.db，跨次对比、排序、复现。支持批量调参（RunSpec.params 覆盖注册默认值 + params_hash 落库）
+- **模型缓存**：ML 训练产物落盘，同参数二次运行跳过重训（LSTM 从约 40 秒降到秒级）
+- **生产/实验隔离**：信号缓存 + 模型存储按 scope=（prod|research）物理分区，实验永不影响生产
 - **完整指标**：36 项（Sortino/Calmar/IR/Alpha/Beta/回撤时长/VaR/换手/成本拖累等）
 - **成本模型参数化**：佣金/印花税/滑点可调，支持成本敏感性分析
 - **2 个股票池**：CSI 500（427 只）+ CSI 800（687 只）

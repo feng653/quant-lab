@@ -70,6 +70,21 @@
 - [x] **生产链路零变化验证**: kernel/shim 数值一致性测试(同 pivot+signals 逐笔成交相等), 14 个页面全部 200
 - [x] 清理 6 个僵尸 app.py 进程 (旧代码占用 8600 端口导致"改了没反应")
 
+### 2026-07-26 P0 补完 — ML 训练隔离
+
+> 背景: 审查发现实验/生产共享 4 个可变状态（参数文件、信号缓存、未持久化模型、无锁写入），
+> 实验可意外影响生产。本阶段修致命隔离缺口。
+
+- [x] **params_override 管道**: `generate_all_signals` → `generate_ml_signals` → `_ml_top_codes_at_retrains` 三函数接受显式参数覆盖, `RunSpec.params` 生效, 调参不碰全局配置
+- [x] **effective_params 落库**: `store.py` runs 表加 `params_hash` 列 + 自动迁移; `runner.py`/`backtest_service.py` 计算 `{**get_params, **spec.params}` 全集并 hash 落库 — 修 P0 可复现漏洞
+- [x] **缓存分区 + 原子写入**: 缓存路径 `{scope}/{strategy}/{params_hash}.json` (scope=prod|research), 不同参数天然不同文件, 删除全局失效逻辑; `os.replace` 原子替换 + `.tmp` 清理
+- [x] **模型持久化** (kernel/model_store.py): `{scope}/{strategy}/{params_hash}/{retrain_date}.pkl` + `.json` 元数据, 二次运行跳过重训 (load_model 命中)
+- [x] **生产缓存隔离**: `sim_runner.py` 传 `cache_scope="prod"`, 实验与生产信号/模型全程独立目录
+- [x] **lab 回测修复**: (a) `request.form.get("mode")` 从后台线程移到路由层 — 修复 RuntimeError; (b) 缩进修正 — modes 循环从策略循环外移到内, 所有策略结果显示
+- [x] **data_version 双格式**: 同时支持 raw OHLCV (columns: date/code) 和 pivot (index=date, columns=code), 模型元数据不再静默丢失
+- [x] **runner.py truthiness 修复**: `rebalance_days=0` 不再被 `or` 错误替换为默认值
+- [x] 代码审查: 2 BLOCKER + 1 CRITICAL + 2 WARNING 全部修复, web 服务验证 13/13 页 200
+
 ## P1 — 研究深度 (下一迭代, ~4h)
 
 - [ ] **参数扫描引擎**: RunSpec 网格展开 → 子 run 批量执行, parent_sweep_id 关联; /research/sweep/<id> 敏感面热力图 + 稳定区识别
