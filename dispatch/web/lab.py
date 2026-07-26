@@ -116,16 +116,17 @@ def lab_backtest():
     strategies = request.form.getlist("s")
     start = request.form.get("start", "2024-01-02")
     end = request.form.get("end") or None
+    mode_choice = request.form.get("mode", "both")    # captured before bg thread
     if not strategies:
         return redirect("/lab")
 
     def work(job):
         from services.backtest_service import run_backtest
-        import pandas as pd
         bt = run_backtest(strategies, start, end)
         rows = ""
         for sn, e in bt["results"].items():
-            for mode in (("equal",) if True else ("equal", "adaptive")):
+            modes = ("equal",) if mode_choice == "equal" else ("equal", "adaptive")
+            for mode in modes:
                 m = e[mode]
                 rows += (f"<tr><td>{e['label']}</td><td>{'等权' if mode=='equal' else '自适应'}</td>"
                          f"<td>{m['total_return']:+.2f}%</td><td>{m['annual_return']:+.2f}%</td>"

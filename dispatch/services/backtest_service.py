@@ -9,6 +9,7 @@ full costs, per-strategy rebalance_days). Used by:
 
 from __future__ import annotations
 
+import json
 import logging
 
 import pandas as pd
@@ -81,9 +82,15 @@ def run_backtest(strategies: list[str], start: str, end: str | None = None,
                            "turnover": round(sum(t["value"] for t in r["trades"]), 2)}
             if persist:
                 try:
+                    import hashlib
+                    from core.strategies.registry import get_params
+                    effective_params = {**get_params(sn), "rebalance_days": rb, "max_positions": spec.max_positions}
+                    params_hash = hashlib.md5(
+                        json.dumps(effective_params, sort_keys=True).encode()
+                    ).hexdigest()[:8]
                     rid = save_run(
                         strategy=sn, label=spec.label, mode=mode,
-                        params={"rebalance_days": rb, "max_positions": spec.max_positions},
+                        params=effective_params, params_hash=params_hash,
                         window_start=w_start, window_end=w_end, n_days=len(sim_dates),
                         pool=pool, rebalance_days=rb, max_positions=spec.max_positions,
                         cost=cm.to_dict(), data_ver=dver, kind="backtest",

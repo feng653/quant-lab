@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS runs (
     label           TEXT,
     mode            TEXT NOT NULL DEFAULT 'equal',
     params_json     TEXT,
+    params_hash     TEXT,
     window_start    TEXT,
     window_end      TEXT,
     n_days          INTEGER,
@@ -130,9 +131,19 @@ def connect():
 
 
 def init_db() -> None:
+    """Create tables, then apply additive migrations for existing databases."""
     with connect() as conn:
         conn.executescript(SCHEMA)
-    logger.info("research.db ready at %s", DB_PATH)
+        _migrate(conn)
+
+
+def _migrate(conn) -> None:
+    """Additive-only migrations. Safe to run on every startup."""
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}
+    for col, ddl in (("params_hash", "ALTER TABLE runs ADD COLUMN params_hash TEXT"),):
+        if col not in existing:
+            conn.execute(ddl)
+            logger.info("research.db migrated: runs.%s added", col)
 
 
 def code_version() -> str:
@@ -147,11 +158,18 @@ def code_version() -> str:
 
 
 def data_version(df) -> str:
-    """Cheap fingerprint of the input data: rows|codes|last_date."""
+    """Cheap fingerprint of the input data.
+
+    Accepts both raw OHLCV (columns: date, code, close…) and a pivot matrix
+    (index=date, columns=codes, values=close). Returns ``"unknown"`` on failure.
+    """
     try:
-        if df is None or len(df) == 0:
+        if df is None or (hasattr(df, 'empty') and df.empty):
             return "empty"
-        return f"{len(df)}|{df['code'].nunique()}|{str(df['date'].max())[:10]}"
+        if hasattr(df, 'columns') and 'code' in df.columns and 'date' in df.columns:
+            return f"{len(df)}|{df['code'].nunique()}|{str(df['date'].max())[:10]}"
+        # pivot DataFrame: index is date, columns are code
+        return f"{df.shape[0]}|{df.shape[1]}|{str(df.index.max())[:10]}"
     except Exception:
         return "unknown"
 
@@ -165,7 +183,7 @@ def new_run_id() -> str:
 
 
 def save_run(*, run_id: str | None = None, strategy: str, label: str = "",
-             mode: str = "equal", params: dict | None = None,
+             mode: str = "equal", params: dict | None = None, params_hash: str = "",
              window_start: str = "", window_end: str = "", n_days: int = 0,
              pool: str = "csi500", rebalance_days: int = 30, max_positions: int = 20,
              cost: dict | None = None, data_ver: str = "", kind: str = "backtest",
@@ -178,13 +196,13 @@ def save_run(*, run_id: str | None = None, strategy: str, label: str = "",
     with connect() as conn:
         conn.execute("""
             INSERT OR REPLACE INTO runs
-              (id, created_at, kind, strategy, label, mode, params_json,
+              (id, created_at, kind, strategy, label, mode, params_json, params_hash,
                window_start, window_end, n_days, pool, rebalance_days,
                max_positions, cost_json, data_version, code_version,
                parent_sweep_id, tag, note, status, duration_sec)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (rid, datetime.now().isoformat(timespec="seconds"), kind, strategy,
-              label, mode, json.dumps(params or {}, ensure_ascii=False),
+              label, mode, json.dumps(params or {}, ensure_ascii=False), params_hash,
               window_start, window_end, n_days, pool, rebalance_days,
               max_positions, json.dumps(cost or {}), data_ver, code_version(),
               parent_sweep_id, tag, note, status, round(duration_sec, 2)))

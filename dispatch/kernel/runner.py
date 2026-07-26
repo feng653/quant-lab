@@ -102,7 +102,10 @@ def execute(spec: RunSpec, run_id: str | None = None) -> RunResult:
         # 2) signals
         from kernel.signal_service import generate_all_signals
 
-        all_sigs = generate_all_signals(pivot, spec.start, [spec.strategy], df=df)
+        params_overrides = {spec.strategy: spec.params} if spec.params else None
+        all_sigs = generate_all_signals(pivot, spec.start, [spec.strategy], df=df,
+                                        params_overrides=params_overrides,
+                                        cache_scope="research")
         sig_dict = all_sigs.get(spec.strategy, {})
 
         # 3) benchmark
@@ -151,15 +154,24 @@ def execute(spec: RunSpec, run_id: str | None = None) -> RunResult:
 def execute_and_save(spec: RunSpec, run_id: str | None = None) -> str:
     """Execute and persist to research.db in one call. Returns run_id."""
     from research.store import save_run
+    import hashlib
+    import json
+    from core.strategies.registry import get_params
 
     result = execute(spec, run_id)
     if result.status == "done":
+        # 计算生效参数（注册中心默认 + spec 覆盖）
+        effective_params = {**get_params(spec.strategy), **(spec.params or {})}
+        params_hash = hashlib.md5(
+            json.dumps(effective_params, sort_keys=True).encode()
+        ).hexdigest()[:8]
+        
         save_run(
             run_id=result.run_id, strategy=spec.strategy, label=result.strategy_label,
-            mode=spec.mode, params=spec.params or {}, window_start=result.window_start,
-            window_end=result.window_end, n_days=result.n_days, pool=spec.pool,
-            rebalance_days=spec.rebalance_days or get_spec(spec.strategy).rebalance_days,
-            max_positions=spec.max_positions or get_spec(spec.strategy).max_positions,
+            mode=spec.mode, params=effective_params, params_hash=params_hash,
+            window_start=result.window_start, window_end=result.window_end, n_days=result.n_days,
+            pool=spec.pool,             rebalance_days=spec.rebalance_days if spec.rebalance_days is not None else get_spec(spec.strategy).rebalance_days,
+            max_positions=spec.max_positions if spec.max_positions is not None else get_spec(spec.strategy).max_positions,
             cost=spec.costs.to_dict(), data_ver=result.data_ver, kind=spec.kind,
             parent_sweep_id=spec.parent_sweep_id, tag=spec.tag, note=spec.note,
             metrics=result.metrics, equity=result.snapshots, trades=result.trades,

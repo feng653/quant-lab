@@ -16,6 +16,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -148,7 +150,7 @@ def prepare_ml_xy(factors: pd.DataFrame, pivot: pd.DataFrame, horizon: int = 20)
 # MODEL TRAINING (param-driven)
 # ═══════════════════════════════════════════════════════════════
 
-def train_lgb(X_train, y_train, X_test, params: dict):
+def train_lgb(X_train, y_train, X_test, params: dict, return_model: bool = False):
     from lightgbm import LGBMRegressor
     y_c = y_train.clip(-0.5, 0.5)
     model = LGBMRegressor(n_estimators=int(params.get("n_estimators", 150)),
@@ -157,10 +159,11 @@ def train_lgb(X_train, y_train, X_test, params: dict):
                           subsample=0.8, colsample_bytree=0.8, reg_alpha=1.0, reg_lambda=1.0,
                           random_state=42, verbose=-1, n_jobs=-1)
     model.fit(X_train, y_c)
-    return pd.Series(model.predict(X_test), index=X_test.index)
+    preds = pd.Series(model.predict(X_test), index=X_test.index)
+    return (model, preds) if return_model else preds
 
 
-def train_xgb(X_train, y_train, X_test, params: dict):
+def train_xgb(X_train, y_train, X_test, params: dict, return_model: bool = False):
     from xgboost import XGBRegressor
     y_c = y_train.clip(-0.5, 0.5)
     model = XGBRegressor(n_estimators=int(params.get("n_estimators", 150)),
@@ -169,10 +172,11 @@ def train_xgb(X_train, y_train, X_test, params: dict):
                          subsample=0.8, colsample_bytree=0.8, reg_alpha=1.0, reg_lambda=1.0,
                          random_state=42)
     model.fit(X_train, y_c)
-    return pd.Series(model.predict(X_test), index=X_test.index)
+    preds = pd.Series(model.predict(X_test), index=X_test.index)
+    return (model, preds) if return_model else preds
 
 
-def train_gbr(X_train, y_train, X_test, params: dict):
+def train_gbr(X_train, y_train, X_test, params: dict, return_model: bool = False):
     """sklearn GradientBoostingRegressor — AlphaMaster migration."""
     from sklearn.ensemble import GradientBoostingRegressor
     y_c = y_train.clip(-0.1, 0.1)
@@ -183,7 +187,8 @@ def train_gbr(X_train, y_train, X_test, params: dict):
         subsample=float(params.get("subsample", 0.6)),
         min_samples_leaf=40, random_state=42)
     model.fit(X_train, y_c)
-    return pd.Series(model.predict(X_test), index=X_test.index)
+    preds = pd.Series(model.predict(X_test), index=X_test.index)
+    return (model, preds) if return_model else preds
 
 
 # ── sequence models ──
@@ -252,7 +257,7 @@ def _make_net(model_type: str, n_feat: int, params: dict):
 
 def train_sequence_model(model_type: str, factors: pd.DataFrame, X_train: pd.DataFrame,
                          y_train: pd.Series, X_test: pd.DataFrame, params: dict,
-                         pred_date=None) -> pd.Series:
+                         pred_date=None, return_model: bool = False) -> pd.Series:
     import torch
 
     torch.manual_seed(42)
@@ -307,8 +312,9 @@ def train_sequence_model(model_type: str, factors: pd.DataFrame, X_train: pd.Dat
 
     model.eval()
     with torch.no_grad():
-        preds = model(torch.FloatTensor(Xte)).numpy()
-    return pd.Series(preds, index=X_test.index)
+        preds_np = model(torch.FloatTensor(Xte)).numpy()
+    preds = pd.Series(preds_np, index=X_test.index)
+    return (model, preds) if return_model else preds
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -320,28 +326,35 @@ def _params_hash(params: dict) -> str:
 
 
 def _ml_top_codes_at_retrains(pivot: pd.DataFrame, strategy: str,
-                              sim_dates: list[pd.Timestamp], factors: pd.DataFrame) -> dict[str, list[str]]:
-    """Top-pick codes at every retrain date, with disk cache (invalidated on param change)."""
+                              sim_dates: list[pd.Timestamp], factors: pd.DataFrame,
+                              params_override: dict | None = None,
+                              cache_scope: str = "research") -> dict[str, list[str]]:
+    """Top-pick codes at every retrain date, with disk cache.
+
+    Cache is scoped (prod|research) and keyed by params_hash, so different
+    parameter sets are naturally isolated — no global invalidation needed.
+    """
+    import research.store as _rstore  # local to avoid circular
+    
     spec = get_spec(strategy)
-    params = get_params(strategy)
+    params = {**get_params(strategy), **(params_override or {})}
     model_type = spec.ml_model_type
     retrain_every = int(params.get("retrain_every", 21))
     horizon = int(params.get("horizon", 20))
     train_window = int(params.get("train_window", 0))
+    seq_len = int(params.get("seq_len", 10))
     top_k = params.get("top_k")
     top_pct = float(params.get("top_pct", 0.1))
     phash = _params_hash({"m": model_type, **params})
 
-    cache_file = _SIGNAL_CACHE_DIR / f"ml_{strategy}.json"
-    cached: dict = {"params_hash": None, "retrains": {}}
+    cache_file = _SIGNAL_CACHE_DIR / cache_scope / strategy / f"{phash}.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cached: dict = {"params_hash": phash, "retrains": {}}
     if cache_file.exists():
         try:
             cached = json.loads(cache_file.read_text())
         except Exception:
             pass
-    if cached.get("params_hash") != phash:
-        logger.info("%s params changed, invalidating ML signal cache", strategy)
-        cached = {"params_hash": phash, "retrains": {}}
     retrains: dict[str, list[str]] = cached.get("retrains", {})
 
     rt_positions = list(range(0, len(sim_dates), retrain_every))
@@ -377,14 +390,42 @@ def _ml_top_codes_at_retrains(pivot: pd.DataFrame, strategy: str,
         logger.info("%s retrain @%s: %d train samples, predicting %d stocks",
                     strategy, rt_date.date(), len(X_tr), len(tf))
         try:
-            if model_type == "lgb":
-                preds = train_lgb(X_tr, y_tr, tf, params)
-            elif model_type == "xgb":
-                preds = train_xgb(X_tr, y_tr, tf, params)
-            elif model_type == "gbr":
-                preds = train_gbr(X_tr, y_tr, tf, params)
+            from kernel.model_store import load_model, save_model
+            
+            rtd_str = str(rt_date.date())
+            model = load_model(strategy, params, rtd_str, scope=cache_scope)
+            if model is not None:
+                if model_type in ("lgb", "xgb", "gbr"):
+                    preds = pd.Series(model.predict(tf), index=tf.index)
+                else:
+                    # LSTM/Transformer — need sequences
+                    test_idx = pd.MultiIndex.from_tuples(
+                        [(pred_date, c) for c in tf.index], names=["date","code"])
+                    Xte, _ = _build_sequences(factors, test_idx, seq_len)
+                    if len(Xte) == 0:
+                        retrains[rtd_str] = []
+                        continue
+                    model.eval()
+                    import torch
+                    with torch.no_grad():
+                        preds = pd.Series(
+                            model(torch.FloatTensor(Xte)).numpy(), index=tf.index)
             else:
-                preds = train_sequence_model(model_type, factors, X_tr, y_tr, tf, params, pred_date=pred_date)
+                if model_type == "lgb":
+                    model, preds = train_lgb(X_tr, y_tr, tf, params, return_model=True)
+                elif model_type == "xgb":
+                    model, preds = train_xgb(X_tr, y_tr, tf, params, return_model=True)
+                elif model_type == "gbr":
+                    model, preds = train_gbr(X_tr, y_tr, tf, params, return_model=True)
+                else:
+                    model, preds = train_sequence_model(
+                        model_type, factors, X_tr, y_tr, tf, params,
+                        pred_date=pred_date, return_model=True)
+                save_model(model, strategy, params, rtd_str,
+                           data_ver=_rstore.data_version(pivot),
+                           code_ver=_rstore.code_version(),
+                           n_samples=len(X_tr), feature_list=list(X_tr.columns),
+                           scope=cache_scope)
         except Exception as e:
             logger.error("%s training failed @%s: %s", strategy, rt_date.date(), e)
             retrains[str(rt_date.date())] = []
@@ -397,13 +438,32 @@ def _ml_top_codes_at_retrains(pivot: pd.DataFrame, strategy: str,
         retrains[str(rt_date.date())] = list(top.index)
 
     cached = {"params_hash": phash, "retrains": retrains}
-    cache_file.write_text(json.dumps(cached, ensure_ascii=False))
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=str(cache_file.parent),
+                                          delete=False, suffix='.tmp', encoding='utf-8') as tf:
+            json.dump(cached, tf, ensure_ascii=False)
+            temp_path = tf.name
+        os.replace(temp_path, str(cache_file))
+    except Exception as e:
+        logger.warning("Failed to write signal cache %s: %s", cache_file, e)
+        if temp_path:
+            try:
+                Path(temp_path).unlink()
+            except Exception:
+                pass
     return {str(d.date()): retrains.get(str(d.date()), []) for d in needed}
 
 
 def generate_ml_signals(pivot: pd.DataFrame, strategy: str, sim_dates: list[pd.Timestamp],
-                        factors: pd.DataFrame | None = None) -> dict:
-    """Walk-forward ML signals: hold top picks between retrain dates."""
+                        factors: pd.DataFrame | None = None,
+                        params_override: dict | None = None,
+                        cache_scope: str = "research") -> dict:
+    """Walk-forward ML signals: hold top picks between retrain dates.
+    
+    params_override: explicit params for this run (overrides registry defaults).
+    cache_scope: "prod" or "research" — isolates caches.
+    """
     if not sim_dates:
         return {}
     spec = get_spec(strategy)
@@ -414,9 +474,10 @@ def generate_ml_signals(pivot: pd.DataFrame, strategy: str, sim_dates: list[pd.T
     if factors.empty:
         return {}
 
-    params = get_params(strategy)
+    params = {**get_params(strategy), **(params_override or {})}
     retrain_every = int(params.get("retrain_every", 21))
-    rt_map = _ml_top_codes_at_retrains(pivot, strategy, sim_dates, factors)
+    rt_map = _ml_top_codes_at_retrains(pivot, strategy, sim_dates, factors,
+                                       params_override=params, cache_scope=cache_scope)
     rt_positions = list(range(0, len(sim_dates), retrain_every))
 
     ss: dict[str, list] = {}
@@ -435,11 +496,17 @@ def generate_ml_signals(pivot: pd.DataFrame, strategy: str, sim_dates: list[pd.T
 
 def generate_all_signals(pivot: pd.DataFrame, sim_start: str,
                          strategies: list[str] | None = None,
-                         df: pd.DataFrame | None = None) -> dict[str, dict]:
+                         df: pd.DataFrame | None = None,
+                         params_overrides: dict[str, dict] | None = None,
+                         cache_scope: str = "research") -> dict[str, dict]:
     """Registry-driven: {strategy: {date_str: [signals]}} for the sim window.
 
     Signal strategies: spec.signal_func(pivot, params) with _sim_start injected.
     ML strategies: walk-forward with per-strategy params and feature set.
+    
+    params_overrides: {strategy: params_dict} to override registry defaults.
+                      Enables batch param sweeps and experiment-specific params.
+    cache_scope: "prod" or "research" — isolates signal/model caches.
     """
     scan_strategies()
     strategies = strategies or list(REGISTRY.keys())
@@ -453,7 +520,7 @@ def generate_all_signals(pivot: pd.DataFrame, sim_start: str,
         if spec is None:
             logger.warning("Unknown strategy %s, skipped", sn)
             continue
-        params = get_params(sn)
+        params = {**get_params(sn), **((params_overrides or {}).get(sn, {}))}
         if spec.signal_func is not None:
             logger.info("Signals: %s", sn)
             try:
@@ -475,7 +542,9 @@ def generate_all_signals(pivot: pd.DataFrame, sim_start: str,
                         logger.info("Computing basic8 factors...")
                         factors_cache["basic8"] = compute_factors(pivot)
                     factors = factors_cache["basic8"]
-                out[sn] = generate_ml_signals(pivot, sn, sim_dates, factors)
+                out[sn] = generate_ml_signals(pivot, sn, sim_dates, factors,
+                                              params_override=(params_overrides or {}).get(sn),
+                                              cache_scope=cache_scope)
             except Exception as e:
                 logger.error("ML signals failed for %s: %s", sn, e)
                 out[sn] = {}

@@ -82,7 +82,7 @@ def run_simulation(strategies: list[str] | None = None, update_data: bool = True
     logger.info("Simulation window: %s → %s (%d days)", sim_start, sim_dates[-1].date(), len(sim_dates))
 
     # 3) signals (enabled strategies; ML cached across runs)
-    all_sigs = generate_all_signals(pivot, sim_start, strategies, df=df)
+    all_sigs = generate_all_signals(pivot, sim_start, strategies, df=df, cache_scope="prod")
 
     # 4) benchmark
     bench = benchmark_window(sim_start)
