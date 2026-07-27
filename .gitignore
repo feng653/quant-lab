@@ -5,12 +5,19 @@ __pycache__/
 dist/
 build/
 .eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Virtual environments
 .venv/
 venv/
 env/
 .env
+.env.*
+!.env.example
 
 # IDE
 .idea/
@@ -25,11 +32,15 @@ data/qlib_data/
 *.parquet
 
 # Runtime state & records
+dispatch/state/scheduler_state.json
+dispatch/state/daily_run.lock
 dispatch/state/strategy_state.json
 dispatch/state/trades.db
 dispatch/state/trades.db-*
 dispatch/state/research.db
 dispatch/state/research.db-*
+dispatch/state/assistant_history.json
+dispatch/state/ai_param_advice.json
 dispatch/state/signals_cache/
 dispatch/state/models/
 dispatch/mail/
